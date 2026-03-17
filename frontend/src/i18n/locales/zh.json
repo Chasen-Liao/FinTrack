@@ -1,0 +1,123 @@
+{
+  "app": {
+    "title": "FinTrack",
+    "selectTicker": "选择股票以查看图表",
+    "noTicker": "未选择股票"
+  },
+  "header": {
+    "rangeSelected": "已选择区间"
+  },
+  "chart": {
+    "open": "开",
+    "high": "高",
+    "low": "低",
+    "close": "收"
+  },
+  "stockSelector": {
+    "placeholder": "选择股票...",
+    "addStock": "添加股票",
+    "search": "搜索..."
+  },
+  "range": {
+    "queryPlaceholder": "输入您的问题...",
+    "askAI": "询问 AI",
+    "askPokieTicker": "询问 FinTrack",
+    "whatsDriving": "什么因素推动股价变动？",
+    "summarizeNews": "总结该时期的关键新闻",
+    "bullBearFactors": "有哪些利好/利空因素？",
+    "clear": "清除",
+    "close": "关闭"
+  },
+  "news": {
+    "title": "新闻",
+    "relevant": "相关",
+    "irrelevant": "无关",
+    "positive": "正面",
+    "negative": "负面",
+    "neutral": "中性",
+    "noNews": "此日期无新闻",
+    "tapToSee": "点击图表上的点查看新闻",
+    "loading": "加载中...",
+    "articles": "篇文章",
+    "locked": "已锁定",
+    "findSimilar": "查找相似",
+    "close": "关闭"
+  },
+  "rangeNews": {
+    "title": "区间新闻",
+    "bullish": "利好新闻",
+    "bearish": "利空新闻",
+    "showAll": "显示全部",
+    "hideAll": "隐藏全部",
+    "selectAStock": "选择股票以查看区间新闻"
+  },
+  "rangeAnalysis": {
+    "title": "区间分析",
+    "analyzing": "AI 正在分析 {start} 至 {end}...",
+    "analysis": "分析",
+    "keyEvents": "关键事件",
+    "bullishFactors": "利好因素",
+    "bearishFactors": "利空因素",
+    "trendAnalysis": "趋势分析",
+    "tradingDays": "个交易日",
+    "newsArticles": "篇新闻文章"
+  },
+  "similar": {
+    "title": "相似日期",
+    "findSimilar": "查找相似",
+    "targetDay": "目标日期特征",
+    "sentiment": "情绪",
+    "articles": "文章数",
+    "rsi": "RSI",
+    "prev1d": "前1日",
+    "historical": "历史模式",
+    "similarDays": "个相似日期",
+    "t1UpRatio": "T+1 上涨概率",
+    "t5UpRatio": "T+5 上涨概率",
+    "avgT1": "平均 T+1",
+    "avgT5": "平均 T+5",
+    "finding": "正在查找相似日期...",
+    "after": "之后:",
+    "news": "新闻",
+    "close": "关闭"
+  },
+  "prediction": {
+    "title": "预测",
+    "analyzing": "正在分析近期新闻...",
+    "noData": "暂无数据",
+    "noModel": "无模型可用",
+    "keyTopics": "热门话题",
+    "analysis": "分析",
+    "bullish": "看涨",
+    "bearish": "看跌",
+    "neutral": "中性",
+    "keyImpactNews": "关键影响新闻",
+    "deepAnalysis": "AI 深度分析",
+    "analyzingNews": "分析中...",
+    "similarHistory": "历史相似时期",
+    "upRate": "上涨概率",
+    "avgRet": "平均收益"
+  },
+  "category": {
+    "all": "全部",
+    "earnings": "财报",
+    "product": "产品",
+    "regulatory": "监管",
+    "market": "市场",
+    "crypto": "加密",
+    "macro": "宏观",
+    "catalyst": "催化剂",
+    "allSentiment": "全部",
+    "bullish": "看涨",
+    "bearish": "看跌",
+    "marketImpact": "市场影响",
+    "policyImpact": "政策影响",
+    "productTech": "产品技术",
+    "competition": "竞争",
+    "management": "管理层变动"
+  },
+  "language": {
+    "en": "English",
+    "zh": "中文"
+  }
+}

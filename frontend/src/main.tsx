@@ -1,0 +1,14 @@
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import axios from 'axios'
+import './i18n/i18n'
+import './index.css'
+import App from './App.tsx'
+
+axios.defaults.baseURL = '/PokieTicker'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)

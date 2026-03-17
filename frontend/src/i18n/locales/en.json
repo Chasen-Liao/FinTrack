@@ -1,0 +1,66 @@
+{
+  "app": {
+    "title": "FinTrack",
+    "selectTicker": "Select a ticker to view the chart",
+    "noTicker": "No ticker selected"
+  },
+  "header": {
+    "rangeSelected": "Range Selected"
+  },
+  "chart": {
+    "open": "O",
+    "high": "H",
+    "low": "L",
+    "close": "C"
+  },
+  "stockSelector": {
+    "placeholder": "Select stock...",
+    "addStock": "Add Stock"
+  },
+  "range": {
+    "queryPlaceholder": "Ask AI about this range...",
+    "askAI": "Ask AI"
+  },
+  "news": {
+    "relevant": "Relevant",
+    "irrelevant": "Irrelevant",
+    "positive": "Positive",
+    "negative": "Negative",
+    "neutral": "Neutral",
+    "noNews": "No news for this date"
+  },
+  "prediction": {
+    "title": "Prediction",
+    "loading": "Loading prediction...",
+    "error": "Failed to load prediction",
+    "noData": "No prediction data"
+  },
+  "analysis": {
+    "title": "Analysis",
+    "keyEvents": "Key Events",
+    "bullishFactors": "Bullish Factors",
+    "bearishFactors": "Bearish Factors",
+    "trendAnalysis": "Trend Analysis"
+  },
+  "story": {
+    "title": "Story"
+  },
+  "similar": {
+    "title": "Similar Days",
+    "findSimilar": "Find Similar"
+  },
+  "category": {
+    "all": "All",
+    "earnings": "Earnings",
+    "product": "Product",
+    "regulatory": "Regulatory",
+    "market": "Market",
+    "crypto": "Crypto",
+    "macro": "Macro",
+    "catalyst": "Catalyst"
+  },
+  "language": {
+    "en": "English",
+    "zh": "中文"
+  }
+}
