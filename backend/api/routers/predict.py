@@ -10,6 +10,40 @@ router = APIRouter()
 MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "ml" / "models"
 
 
+@router.get("/strategy-best")
+def get_best_strategy():
+    """Get saved best strategy scan result."""
+    path = MODELS_DIR / "strategy_best.json"
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No best strategy result. Run python -m backend.ml.strategy_backtest --scan.",
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@router.get("/{symbol}/strategy-backtest")
+def get_strategy_backtest(
+    symbol: str,
+    horizon: str = Query("t5", pattern="^t[15]$"),
+    threshold: float = Query(0.60, ge=0.0, le=1.0),
+):
+    """Get saved strategy return backtest for a symbol."""
+    sym = symbol.upper()
+    threshold_label = f"{int(round(threshold * 100)):02d}"
+    path = MODELS_DIR / f"{sym}_{horizon}_thr{threshold_label}_strategy_backtest.json"
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No strategy backtest for {sym}/{horizon}/{threshold}. "
+                f"Run python -m backend.ml.strategy_backtest --symbol {sym} "
+                f"--horizon {horizon} --threshold {threshold}."
+            ),
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 @router.get("/{symbol}")
 def get_prediction(symbol: str, horizon: str = Query("t1", regex="^t[15]$")):
     """Get direction prediction for a symbol."""

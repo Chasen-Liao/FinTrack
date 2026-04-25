@@ -43,6 +43,7 @@ logs/
 *.log
 
 # IDE
+.worktrees/
 .vscode/
 .idea/
 *.swp
