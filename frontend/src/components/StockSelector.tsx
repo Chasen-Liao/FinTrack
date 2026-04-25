@@ -16,18 +16,18 @@ interface Props {
 }
 
 const GROUPS: Record<string, string[]> = {
-  'Tech': ['AAPL', 'MSFT', 'GOOGL', 'GOOG', 'META', 'AMZN', 'CRM', 'ORCL', 'IBM', 'CSCO', 'NOW', 'WDAY', 'SNOW', 'DELL', 'ADBE'],
-  'AI / Chip': ['NVDA', 'AMD', 'TSM', 'AVGO', 'INTC', 'QCOM', 'ARM', 'AMAT', 'LRCX', 'MU', 'MRVL', 'SMCI', 'CRWV', 'TXN', 'ASML'],
-  'AI Software': ['AI', 'SOUN', 'SOUNW', 'CRWD', 'ANET', 'IDCC'],
-  'EV / Auto': ['TSLA', 'RIVN', 'LCID', 'NIO', 'LI', 'BYDDY', 'F', 'GM', 'STLA', 'TM'],
-  'China': ['BABA', 'JD', 'BIDU', 'NIO', 'LI', 'BILI', 'NTES', 'SE', 'MCHI', 'FXI'],
-  'Finance': ['V', 'MA', 'GS', 'MS', 'BAC', 'WFC', 'C', 'BLK', 'COIN', 'HOOD', 'MARA'],
-  'Media': ['NFLX', 'DIS', 'ROKU', 'WBD', 'ZM'],
-  'Consumer': ['COST', 'WMT', 'HD', 'TGT', 'NKE', 'SBUX', 'MCD', 'CMG', 'KO', 'EBAY', 'MELI'],
-  'Health': ['UNH', 'JNJ', 'LLY', 'MRNA', 'NVO'],
-  'Energy': ['XOM', 'CVX', 'OXY', 'XLE', 'USO'],
-  'Telecom': ['T', 'VZ'],
-  'Other': ['BA', 'UBER', 'GME', 'AMC', 'MULN', 'SQ', 'FB', 'AMJB', 'GLD', 'XLU', 'XLY', 'DIDI'],
+  tech: ['AAPL', 'MSFT', 'GOOGL', 'GOOG', 'META', 'AMZN', 'CRM', 'ORCL', 'IBM', 'CSCO', 'NOW', 'WDAY', 'SNOW', 'DELL', 'ADBE'],
+  aiChip: ['NVDA', 'AMD', 'TSM', 'AVGO', 'INTC', 'QCOM', 'ARM', 'AMAT', 'LRCX', 'MU', 'MRVL', 'SMCI', 'CRWV', 'TXN', 'ASML'],
+  aiSoftware: ['AI', 'SOUN', 'SOUNW', 'CRWD', 'ANET', 'IDCC'],
+  evAuto: ['TSLA', 'RIVN', 'LCID', 'NIO', 'LI', 'BYDDY', 'F', 'GM', 'STLA', 'TM'],
+  china: ['BABA', 'JD', 'BIDU', 'NIO', 'LI', 'BILI', 'NTES', 'SE', 'MCHI', 'FXI'],
+  finance: ['V', 'MA', 'GS', 'MS', 'BAC', 'WFC', 'C', 'BLK', 'COIN', 'HOOD', 'MARA'],
+  media: ['NFLX', 'DIS', 'ROKU', 'WBD', 'ZM'],
+  consumer: ['COST', 'WMT', 'HD', 'TGT', 'NKE', 'SBUX', 'MCD', 'CMG', 'KO', 'EBAY', 'MELI'],
+  health: ['UNH', 'JNJ', 'LLY', 'MRNA', 'NVO'],
+  energy: ['XOM', 'CVX', 'OXY', 'XLE', 'USO'],
+  telecom: ['T', 'VZ'],
+  other: ['BA', 'UBER', 'GME', 'AMC', 'MULN', 'SQ', 'FB', 'AMJB', 'GLD', 'XLU', 'XLY', 'DIDI'],
 };
 
 export default function StockSelector({ activeTickers, selectedSymbol, onSelect, onAdd }: Props) {
@@ -99,11 +99,11 @@ export default function StockSelector({ activeTickers, selectedSymbol, onSelect,
   const assigned = new Set(renderedGroups.flatMap((g) => g.symbols));
   const ungrouped = activeTickers.filter((s) => !assigned.has(s)).sort();
   if (ungrouped.length > 0) {
-    const otherGroup = renderedGroups.find((g) => g.label === 'Other');
+    const otherGroup = renderedGroups.find((g) => g.label === 'other');
     if (otherGroup) {
       otherGroup.symbols.push(...ungrouped);
     } else {
-      renderedGroups.push({ label: 'Other', symbols: ungrouped });
+      renderedGroups.push({ label: 'other', symbols: ungrouped });
     }
   }
 
@@ -123,7 +123,7 @@ export default function StockSelector({ activeTickers, selectedSymbol, onSelect,
           <div className="ticker-panel">
             {renderedGroups.map((group) => (
               <div className="ticker-panel-group" key={group.label}>
-                <div className="ticker-panel-group-label">{group.label}</div>
+                <div className="ticker-panel-group-label">{t(`groups.${group.label}`)}</div>
                 <div className="ticker-panel-group-items">
                   {group.symbols.map((sym) => (
                     <button

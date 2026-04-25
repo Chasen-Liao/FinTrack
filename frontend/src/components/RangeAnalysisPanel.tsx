@@ -33,7 +33,7 @@ interface Props {
 }
 
 export default function RangeAnalysisPanel({ symbol, startDate, endDate, question, onClear }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [data, setData] = useState<RangeAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export default function RangeAnalysisPanel({ symbol, startDate, endDate, questio
     axios
       .post<RangeAnalysis>(
         '/api/analysis/range',
-        { symbol, start_date: startDate, end_date: endDate, question, language: "zh" },
+        { symbol, start_date: startDate, end_date: endDate, question, language: i18n.language.startsWith('zh') ? 'zh' : 'en' },
         { signal: controller.signal }
       )
       .then((res) => {
@@ -63,13 +63,13 @@ export default function RangeAnalysisPanel({ symbol, startDate, endDate, questio
       })
       .catch((err) => {
         if (!axios.isCancel(err)) {
-          setError('Analysis failed');
+          setError(t('rangeAnalysis.failed'));
         }
       })
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [symbol, startDate, endDate, question]);
+  }, [symbol, startDate, endDate, question, i18n.language, t]);
 
   const changePct = data?.price_change_pct ?? 0;
   const isUp = changePct >= 0;
@@ -106,7 +106,7 @@ export default function RangeAnalysisPanel({ symbol, startDate, endDate, questio
 
           {/* Price summary card */}
           <div className="range-price-card">
-            <div className="range-dates">{data.start_date} to {data.end_date}</div>
+            <div className="range-dates">{data.start_date} {t('range.to')} {data.end_date}</div>
             <div className="range-price-row">
               <span className="range-price">${data.open_price.toFixed(2)} → ${data.close_price.toFixed(2)}</span>
               <span className={`range-change ${isUp ? 'up' : 'down'}`}>

@@ -14,10 +14,11 @@ interface Props {
   range: RangeSelection;
   chartRect?: DOMRect;
   onAsk: (question: string) => void;
+  onZoom: () => void;
   onClose: () => void;
 }
 
-export default function RangeQueryPopup({ range, chartRect, onAsk, onClose }: Props) {
+export default function RangeQueryPopup({ range, chartRect, onAsk, onZoom, onClose }: Props) {
   const { t } = useTranslation();
   const [custom, setCustom] = useState('');
 
@@ -69,6 +70,15 @@ export default function RangeQueryPopup({ range, chartRect, onAsk, onClose }: Pr
       </div>
 
       <div className="range-popup-label">{t('range.askPokieTicker')}</div>
+
+      <button
+        type="button"
+        className="range-popup-zoom"
+        onClick={onZoom}
+      >
+        <span>{t('range.zoomIn')}</span>
+        <span className="range-popup-arrow">&rsaquo;</span>
+      </button>
 
       {presetQuestions.map((q) => (
         <button

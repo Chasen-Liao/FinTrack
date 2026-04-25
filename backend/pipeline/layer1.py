@@ -15,11 +15,12 @@ import anthropic
 
 from backend.config import settings
 from backend.database import get_conn
-from backend.llm import get_llm_client
+from backend.llm import get_llm_client_for
 
 # Model configuration - defaults for SiliconFlow
 DEFAULT_MODEL = "deepseek-ai/DeepSeek-R1"
-BATCH_SIZE = 50  # articles per API call
+MODEL = "claude-haiku-4-5-20251001"  # Anthropic Batch API model
+BATCH_SIZE = 20  # articles per API call
 MAX_OUTPUT_TOKENS = 4096  # enough for 50 articles (~70 tokens each)
 
 # Comprehensive keyword mappings for extraction
@@ -102,7 +103,7 @@ def _build_batch_prompt(symbol: str, articles: List[Dict[str, Any]]) -> str:
         if extract:
             lines.append(f"  > {extract}")
 
-    return f"""Rate these {len(articles)} articles for {symbol}. Return JSON array only.
+    return f"""Rate these {len(articles)} articles for {symbol}. Return JSON array only. Do not include markdown, explanations, or thinking text.
 
 {chr(10).join(lines)}
 
@@ -113,6 +114,36 @@ e: 10-word summary of what happened (empty if irrelevant)
 u: why this could push {symbol} stock UP, e.g. "strong earnings beat expectations" (empty if none or irrelevant)
 d: why this could push {symbol} stock DOWN, e.g. "antitrust lawsuit threatens App Store revenue" (empty if none or irrelevant)
 JSON:"""
+
+
+def _parse_batch_response(text: str) -> List[Dict[str, Any]]:
+    """Extract the result array from common LLM response shapes."""
+    raw = (text or "").strip()
+    if not raw:
+        raise ValueError("empty LLM response")
+
+    fenced = re.search(r"```(?:json)?\s*(.*?)```", raw, flags=re.IGNORECASE | re.DOTALL)
+    if fenced:
+        raw = fenced.group(1).strip()
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        start = raw.find("[")
+        end = raw.rfind("]") + 1
+        if start < 0 or end <= start:
+            raise ValueError(f"no JSON array found; response starts with: {raw[:160]!r}")
+        parsed = json.loads(raw[start:end])
+
+    if isinstance(parsed, dict):
+        for key in ("results", "items", "articles", "data"):
+            if isinstance(parsed.get(key), list):
+                parsed = parsed[key]
+                break
+
+    if not isinstance(parsed, list):
+        raise ValueError(f"expected JSON array, got {type(parsed).__name__}")
+    return parsed
 
 
 def get_pending_articles(symbol: str, limit: int = 10000) -> List[Dict[str, Any]]:
@@ -145,18 +176,10 @@ def process_batch_group(
 
     try:
         # Use unified LLM client
-        llm_client = get_llm_client()
+        llm_client = _get_layer1_llm_client()
         text = llm_client.chat_simple(prompt=prompt, max_tokens=MAX_OUTPUT_TOKENS)
 
-        # Parse JSON array
-        start = text.find("[")
-        end = text.rfind("]") + 1
-        if start < 0 or end <= start:
-            stats["errors"] = len(articles)
-            conn.close()
-            return stats
-
-        results = json.loads(text[start:end])
+        results = _parse_batch_response(text)
 
         for item in results:
             idx = item.get("i")
@@ -191,7 +214,7 @@ def process_batch_group(
             else:
                 stats["irrelevant"] += 1
 
-    except (json.JSONDecodeError, KeyError) as e:
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
         stats["errors"] = len(articles)
         print(f"Batch error for {symbol}: {e}")
     except ValueError as e:
@@ -202,6 +225,18 @@ def process_batch_group(
     conn.commit()
     conn.close()
     return stats
+
+
+def _get_layer1_llm_client():
+    """Create the LLM client configured for Layer 1 batch analysis."""
+    provider = settings.layer1_llm_provider or settings.llm_provider
+    model = settings.layer1_llm_model or settings.llm_model
+    return get_llm_client_for(
+        provider=provider,
+        model=model,
+        api_key=settings.layer1_llm_api_key or None,
+        base_url=settings.layer1_llm_base_url or None,
+    )
 
 
 def run_layer1(symbol: str, max_articles: int = 10000) -> Dict[str, Any]:

@@ -9,11 +9,7 @@ from backend.config import settings
 
 # 使用硅基流动的LLM
 SILICONFLOW_MODELS = {
-    "deepseek-r1": "deepseek-ai/DeepSeek-R1",
-    "deepseek-v3": "deepseek-ai/DeepSeek-V3",
-    # "qwq-32b": "Qwen/QwQ-32B",
-    "qwen2.5-72b": "Qwen/Qwen2.5-72B-Instruct",
-    "qwen2.5-32b": "Qwen/Qwen2.5-32B-Instruct",
+    "stepfun-ai/Step-3.5-Flash": "stepfun-ai/Step-3.5-Flash",
 }
 
 # Anthropic models
@@ -26,24 +22,38 @@ ANTHROPIC_MODELS = {
 class LLMClient:
     """Unified LLM client for SiliconFlow and Anthropic."""
 
-    def __init__(self, provider: Optional[str] = None, model: Optional[str] = None):
+    def __init__(
+        self,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ):
         self.provider = provider or settings.llm_provider or "siliconflow"
         self.model = model
+        self.api_key = api_key
+        self.base_url = base_url
 
-        if self.provider == "siliconflow":
-            if not settings.siliconflow_api_key:
-                raise ValueError("SiliconFlow API key not configured")
+        if self.provider in ("siliconflow", "custom", "openai", "openai-compatible"):
+            resolved_api_key = self.api_key or settings.llm_api_key or settings.siliconflow_api_key
+            if not resolved_api_key:
+                raise ValueError("LLM API key not configured")
             self.client = OpenAI(
-                api_key=settings.siliconflow_api_key,
-                base_url="https://api.siliconflow.cn/v1",
+                api_key=resolved_api_key,
+                base_url=self.base_url or settings.llm_base_url,
             )
-            self.default_model = "deepseek-ai/DeepSeek-R1"
+            self.default_model = self.model or settings.llm_model or "deepseek-ai/DeepSeek-R1"
         elif self.provider == "anthropic":
             import anthropic
-            if not settings.anthropic_api_key:
+            resolved_api_key = self.api_key or settings.anthropic_api_key
+            if not resolved_api_key:
                 raise ValueError("Anthropic API key not configured")
-            self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-            self.default_model = "claude-haiku-4-5-20251001"
+            resolved_base_url = (self.base_url or settings.llm_base_url).strip() or None
+            kwargs: Dict[str, Any] = {"api_key": resolved_api_key}
+            if resolved_base_url and resolved_base_url != "https://api.siliconflow.cn/v1":
+                kwargs["base_url"] = resolved_base_url
+            self.client = anthropic.Anthropic(**kwargs)
+            self.default_model = self.model or settings.llm_model or "claude-haiku-4-5-20251001"
         else:
             raise ValueError(f"Unknown LLM provider: {self.provider}")
 
@@ -57,15 +67,18 @@ class LLMClient:
         """Send a chat request and return the response text."""
         model = model or self.model or self.default_model
 
-        # Map model aliases for SiliconFlow
-        if self.provider == "siliconflow" and model.lower() in SILICONFLOW_MODELS:
+        # Map model aliases for OpenAI-compatible providers
+        if (
+            self.provider in ("siliconflow", "custom", "openai", "openai-compatible")
+            and model.lower() in SILICONFLOW_MODELS
+        ):
             model = SILICONFLOW_MODELS[model.lower()]
 
         # Map model aliases for Anthropic
         if self.provider == "anthropic" and model.lower() in ANTHROPIC_MODELS:
             model = ANTHROPIC_MODELS[model.lower()]
 
-        if self.provider == "siliconflow":
+        if self.provider in ("siliconflow", "custom", "openai", "openai-compatible"):
             response = self.client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -90,7 +103,14 @@ class LLMClient:
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return response.content[0].text if response.content else ""
+            text_parts = [
+                block.text
+                for block in response.content
+                if getattr(block, "type", None) == "text" and hasattr(block, "text")
+            ]
+            if text_parts:
+                return "\n".join(text_parts)
+            return ""
 
     def chat_simple(
         self,
@@ -116,6 +136,16 @@ def get_llm_client() -> LLMClient:
     if _llm_client is None:
         _llm_client = LLMClient()
     return _llm_client
+
+
+def get_llm_client_for(
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+) -> LLMClient:
+    """Create a non-cached LLM client for a specific use case."""
+    return LLMClient(provider=provider, model=model, api_key=api_key, base_url=base_url)
 
 
 def reset_llm_client() -> None:

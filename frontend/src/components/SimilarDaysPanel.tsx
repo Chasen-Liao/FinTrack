@@ -51,9 +51,9 @@ export default function SimilarDaysPanel({ symbol, date, onClose }: Props) {
     axios
       .get(`/api/predict/${symbol}/similar-days?date=${date}`)
       .then((res) => setData(res.data))
-      .catch(() => setError('Failed to find similar days'))
+      .catch(() => setError(t('similar.failed')))
       .finally(() => setLoading(false));
-  }, [symbol, date]);
+  }, [symbol, date, t]);
 
   return (
     <div className="news-panel">
@@ -133,26 +133,26 @@ export default function SimilarDaysPanel({ symbol, date, onClose }: Props) {
           </div>
 
           {/* Similar days list */}
-          <div className="sim-section-label" style={{ padding: '8px 4px 4px' }}>Similar Days</div>
+          <div className="sim-section-label" style={{ padding: '8px 4px 4px' }}>{t('similar.similarDaysTitle')}</div>
           {data.similar_days.map((day) => (
             <div key={day.date} className="sim-day-card">
               <div className="sim-day-header">
                 <span className="sim-day-date">{day.date}</span>
-                <span className="sim-day-score">sim {(day.similarity * 100).toFixed(0)}%</span>
+                <span className="sim-day-score">{t('similar.sim')} {(day.similarity * 100).toFixed(0)}%</span>
               </div>
               <div className="sim-day-details">
                 <span className={`sim-day-chip ${day.sentiment_score >= 0 ? 'up' : 'down'}`}>
-                  sent {day.sentiment_score.toFixed(2)}
+                  {t('similar.sent')} {day.sentiment_score.toFixed(2)}
                 </span>
                 <span className="sim-day-chip neutral">
-                  {day.n_articles} news
+                  {day.n_articles} {t('similar.news')}
                 </span>
                 <span className="sim-day-chip neutral">
                   RSI {day.rsi_14.toFixed(0)}
                 </span>
               </div>
               <div className="sim-day-returns">
-                <span className="sim-day-ret-label">After:</span>
+                <span className="sim-day-ret-label">{t('similar.after')}</span>
                 {day.ret_t1_after !== null && (
                   <span className={`sim-day-ret ${day.ret_t1_after >= 0 ? 'up' : 'down'}`}>
                     T+1 {day.ret_t1_after >= 0 ? '+' : ''}{day.ret_t1_after.toFixed(2)}%

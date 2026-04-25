@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import axios from 'axios';
+import { useTranslation } from 'react-i18next';
 
 interface OHLCRow {
   date: string;
@@ -47,6 +48,8 @@ interface Props {
   lockedNewsId?: string | null;
   highlightedArticleIds?: string[] | null;
   highlightColor?: string | null;
+  zoomRange?: RangeSelection | null;
+  onZoomReset?: () => void;
   onHover: (date: string | null, ohlc?: HoverData) => void;
   onRangeSelect?: (range: RangeSelection | null) => void;
   onArticleSelect?: (article: ArticleSelection | null) => void;
@@ -84,12 +87,15 @@ interface PlacedParticle extends Particle {
   alpha: number;
 }
 
-export default function CandlestickChart({ symbol, lockedNewsId, highlightedArticleIds, highlightColor, onHover, onRangeSelect, onArticleSelect, onDayClick }: Props) {
+export default function CandlestickChart({ symbol, lockedNewsId, highlightedArticleIds, highlightColor, zoomRange, onZoomReset, onHover, onRangeSelect, onArticleSelect, onDayClick }: Props) {
+  const { t } = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
+  const ohlcRowsRef = useRef<OHLCRow[]>([]);
+  const particlesRef = useRef<Particle[]>([]);
 
   // Refs for interaction state (avoid re-renders)
   const placedRef = useRef<PlacedParticle[]>([]);
@@ -202,11 +208,18 @@ export default function CandlestickChart({ symbol, lockedNewsId, highlightedArti
       axios.get<Particle[]>(`/api/news/${symbol}/particles`),
     ])
       .then(([ohlcRes, particlesRes]) => {
+        ohlcRowsRef.current = ohlcRes.data;
+        particlesRef.current = particlesRes.data;
         drawChart(ohlcRes.data, particlesRes.data);
       })
       .catch((err) => console.error('Chart error:', err))
       .finally(() => setLoading(false));
   }, [symbol]);
+
+  useEffect(() => {
+    if (ohlcRowsRef.current.length === 0) return;
+    drawChart(ohlcRowsRef.current, particlesRef.current);
+  }, [zoomRange]);
 
   function drawChart(rawData: OHLCRow[], particles: Particle[]) {
     const svg = d3.select(svgRef.current);
@@ -225,7 +238,7 @@ export default function CandlestickChart({ symbol, lockedNewsId, highlightedArti
 
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    const data = rawData.map((d, i) => ({
+    const allData = rawData.map((d, i) => ({
       date: new Date(d.date),
       dateStr: d.date,
       open: +d.open,
@@ -235,6 +248,11 @@ export default function CandlestickChart({ symbol, lockedNewsId, highlightedArti
       volume: +d.volume,
       change: i > 0 ? ((+d.close - +rawData[i - 1].close) / +rawData[i - 1].close) * 100 : 0,
     }));
+    const data = zoomRange
+      ? allData.filter((d) => d.dateStr >= zoomRange.startDate && d.dateStr <= zoomRange.endDate)
+      : allData;
+
+    if (data.length === 0) return;
 
     // Build a lookup: dateStr → OHLC row
     const dateToOhlc = new Map<string, typeof data[0]>();
@@ -638,13 +656,22 @@ export default function CandlestickChart({ symbol, lockedNewsId, highlightedArti
 
   return (
     <div ref={containerRef} className="chart-container">
-      {loading && <div className="chart-loading">Loading...</div>}
+      {loading && <div className="chart-loading">{t('chart.loading')}</div>}
       <svg ref={svgRef}></svg>
       <canvas
         ref={canvasRef}
         className="particle-layer"
       />
       <div ref={tooltipRef} className="particle-tooltip" style={{ display: 'none' }} />
+      {zoomRange && (
+        <button
+          type="button"
+          className="chart-reset-zoom"
+          onClick={onZoomReset}
+        >
+          {t('chart.resetZoom')}
+        </button>
+      )}
     </div>
   );
 }

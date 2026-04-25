@@ -31,10 +31,22 @@ def get_cached(news_id: str, symbol: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _contains_chinese(text: str) -> bool:
+    return any("\u4e00" <= ch <= "\u9fff" for ch in text or "")
+
+
 def analyze_article(news_id: str, symbol: str) -> Dict[str, Any]:
     """Run deep Sonnet analysis on a single article. Returns cached if available."""
     cached = get_cached(news_id, symbol)
-    if cached:
+    if cached and _contains_chinese(
+        " ".join(
+            [
+                cached.get("discussion") or "",
+                cached.get("growth_reasons") or "",
+                cached.get("decrease_reasons") or "",
+            ]
+        )
+    ):
         return cached
 
     # Fetch article data
@@ -51,20 +63,20 @@ def analyze_article(news_id: str, symbol: str) -> Dict[str, Any]:
     # Use unified LLM client
     llm_client = get_llm_client()
 
-    prompt = f"""You are a senior financial analyst. Provide a deep analysis of this news article's impact on {symbol} stock.
+    prompt = f"""你是一位资深金融分析师。请用中文深入分析这篇新闻对 {symbol} 股票的影响。
 
-TITLE: {article['title']}
+标题：{article['title']}
 
-DESCRIPTION: {article['description'] or 'No description available'}
+摘要：{article['description'] or '无摘要'}
 
-Provide your analysis as JSON:
+请只返回 JSON，字段名必须保持英文，字段值必须全部使用中文：
 {{
-  "discussion": "Detailed analysis of the article's impact on {symbol} (200-300 words)",
-  "growth_reasons": "Specific factors from this news that could drive {symbol} stock price up (bullet points)",
-  "decrease_reasons": "Specific risk factors from this news that could drive {symbol} stock price down (bullet points)"
+  "discussion": "详细分析这篇新闻对 {symbol} 的影响，约 200-300 个中文字",
+  "growth_reasons": "这篇新闻中可能推动 {symbol} 股价上涨的具体因素，使用中文要点列出",
+  "decrease_reasons": "这篇新闻中可能导致 {symbol} 股价下跌的具体风险因素，使用中文要点列出"
 }}
 
-Respond with JSON only."""
+不要输出英文分析，不要输出 Markdown，不要输出 JSON 以外的内容。"""
 
     text = llm_client.chat_simple(prompt=prompt, max_tokens=1024)
     try:

@@ -10,6 +10,7 @@ import RangeQueryPopup from './components/RangeQueryPopup';
 import RangeNewsPanel from './components/RangeNewsPanel';
 import SimilarDaysPanel from './components/SimilarDaysPanel';
 import PredictionPanel from './components/PredictionPanel';
+import StrategyBacktestPanel from './components/StrategyBacktestPanel';
 import './App.css';
 
 interface RangeSelection {
@@ -39,9 +40,11 @@ function App() {
     change: number;
   } | null>(null);
   const [selectedRange, setSelectedRange] = useState<RangeSelection | null>(null);
+  const [zoomRange, setZoomRange] = useState<RangeSelection | null>(null);
   const [rangeQuestion, setRangeQuestion] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<ArticleSelection | null>(null);
+  const [rightPanelMode, setRightPanelMode] = useState<'forecast' | 'strategy'>('forecast');
 
   // Locked article state (click-to-lock)
   const [lockedArticle, setLockedArticle] = useState<ArticleSelection | null>(null);
@@ -148,6 +151,7 @@ function App() {
   const handleDayClick = useCallback((date: string) => {
     setSelectedDay(date);
     setSelectedRange(null);
+    setZoomRange(null);
     setRangeQuestion(null);
     setSelectedArticle(null);
     setLockedArticle(null);
@@ -249,7 +253,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-left">
-          <h1>FinTrack</h1>
+          <h1>{t('app.title')}</h1>
         </div>
         <StockSelector
           activeTickers={activeTickers}
@@ -284,7 +288,7 @@ function App() {
           <button
             className="theme-toggle"
             onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? t('header.switchToLight') : t('header.switchToDark')}
           >
             {theme === 'dark' ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -317,6 +321,8 @@ function App() {
                 lockedNewsId={lockedArticle?.newsId ?? null}
                 highlightedArticleIds={activeCategoryIds.length > 0 ? activeCategoryIds : null}
                 highlightColor={activeCategoryColor}
+                zoomRange={zoomRange}
+                onZoomReset={() => setZoomRange(null)}
                 onHover={handleHover}
                 onRangeSelect={handleRangeSelect}
                 onArticleSelect={handleArticleSelect}
@@ -326,6 +332,11 @@ function App() {
                 <RangeQueryPopup
                   range={selectedRange}
                   chartRect={chartRect}
+                  onZoom={() => {
+                    setZoomRange(selectedRange);
+                    setSelectedRange(null);
+                    setRangeQuestion(null);
+                  }}
                   onAsk={handleRangeAsk}
                   onClose={() => setSelectedRange(null)}
                 />
@@ -337,7 +348,25 @@ function App() {
         </div>
         {selectedSymbol && (
           <div className="prediction-area">
-            <PredictionPanel symbol={selectedSymbol} />
+            <div className="right-mode-tabs">
+              <button
+                className={`right-mode-tab ${rightPanelMode === 'forecast' ? 'active' : ''}`}
+                onClick={() => setRightPanelMode('forecast')}
+              >
+                {t('header.aiForecast')}
+              </button>
+              <button
+                className={`right-mode-tab ${rightPanelMode === 'strategy' ? 'active' : ''}`}
+                onClick={() => setRightPanelMode('strategy')}
+              >
+                {t('header.strategy')}
+              </button>
+            </div>
+            {rightPanelMode === 'forecast' ? (
+              <PredictionPanel symbol={selectedSymbol} />
+            ) : (
+              <StrategyBacktestPanel />
+            )}
           </div>
         )}
         <div className="news-area">

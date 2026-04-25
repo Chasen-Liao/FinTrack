@@ -1,11 +1,15 @@
 # FinTrack - 智能股票新闻分析系统
 
+![总览](image-4.png)
+
 > 基于 AI 的股票新闻分析系统，将新闻与股价走势关联，实现智能选股决策支持
 
 ![1](image/新闻.png)
 
 基于LLM的区间分析：
 ![2](image/区间分析.png)
+
+
 
 ## 系统概览
 
@@ -529,22 +533,178 @@ LLM_PROVIDER=siliconflow
 
 ### 启动服务
 
-```bash
-# 启动后端 (端口 8000)
-cd backend
-uvicorn api.main:app --reload
+后端必须在项目根目录启动，这样 Python 才能正确导入 `backend.*` 模块。
 
-# 启动前端 (端口 5173)
-cd frontend
-npm install
+#### 1. 启动后端 FastAPI
+
+PowerShell:
+
+```powershell
+cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
+.\venv\Scripts\python.exe -m uvicorn backend.api.main:app --host 127.0.0.1 --port 8000
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+#### 2. 启动前端 Vite
+
+PowerShell:
+
+```powershell
+cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker\frontend
 npm run dev
+```
+
+如果本机没有配置 `npm`，也可以直接使用 Node 启动 Vite：
+
+```powershell
+cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker\frontend
+C:\Users\25588\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 5173
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:5173/PokieTicker/
+```
+
+如果 Vite 使用配置文件中的默认端口 `7777`，则访问：
+
+```text
+http://127.0.0.1:7777/PokieTicker/
+```
+
+### 更新数据资源
+
+数据资源分两部分更新：先从 Polygon.io 更新行情和新闻，再对新增新闻执行 AI 情感分析。运行下面命令前，请确认 `.env` 中已经配置 `POLYGON_API_KEY` 和可用的 LLM Key。
+
+#### 1. 添加或更新单只股票
+
+前端添加股票会调用后端 `POST /api/stocks`，后端会在后台抓取最近约 2 年的 OHLC 和新闻：
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/api/stocks" `
+  -ContentType "application/json" `
+  -Body '{"symbol":"AAPL","name":"Apple Inc."}'
+```
+
+也可以直接在前端搜索并添加股票。抓取完成后，数据会写入本地 SQLite：`ohlc`、`news_raw`、`news_ticker`，并更新 `tickers.last_ohlc_fetch` 和 `tickers.last_news_fetch`。
+
+#### 2. 批量补齐未抓取股票
+
+如果数据库里有很多 ticker 还没有行情数据，使用批量抓取脚本：
+
+```powershell
+cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
+.\venv\Scripts\python.exe -m backend.bulk_fetch
+```
+
+该脚本会为 `last_ohlc_fetch IS NULL` 的股票抓取最近约 2 年的 OHLC 和新闻，并执行新闻交易日对齐与 Layer 0 规则过滤。
+
+#### 3. 增量更新已有股票
+
+日常更新使用增量脚本：
+
+```powershell
+cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
+.\venv\Scripts\python.exe -m backend.weekly_update
+```
+
+它会根据每只股票的 `last_ohlc_fetch`、`last_news_fetch`，只抓取上次更新时间之后的新 OHLC 和新闻。抓到新新闻后，会执行：
+
+- `align_news_for_symbol(symbol)`：把新闻对齐到交易日并计算 `T+0/T+1/T+3/T+5/T+10` 收益。
+- `run_layer0(symbol)`：过滤空摘要、过短摘要、市场综述和榜单类新闻。
+
+如需定时运行，可用系统计划任务或 cron。项目自身没有内置常驻调度器。
+
+#### 4. 更新 AI 新闻情感分析
+
+行情和新闻更新后，新增新闻只会完成对齐和 Layer 0 过滤；情感分析需要单独运行 Layer 1。单只股票示例：
+
+```powershell
+cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
+.\venv\Scripts\python.exe -c "from backend.pipeline.layer1 import run_layer1; print(run_layer1('AAPL', max_articles=1000))"
+```
+
+Layer 1 会把通过规则过滤、但尚未分析过的新闻按 50 篇一组发送给 LLM，要求返回相关性、情感方向、摘要、上涨原因和下跌原因。结果写入 `layer1_results`，前端新闻面板、粒子图和区间分析会读取这些结果。
+
+如果要分析其他股票，把命令中的 `AAPL` 换成对应 ticker。`max_articles` 可按预算调小或调大。
+
+如果要按当前 `.env` 配置批量处理多个股票，运行：
+
+```powershell
+cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
+.\venv\Scripts\python.exe -m backend.batch_submit --top 50
+```
+
+为控制 token 消耗，可以先限制每只股票处理的新闻数：
+
+```powershell
+.\venv\Scripts\python.exe -m backend.batch_submit --top 5 --max-per-symbol 50
+```
+
+默认情况下，区间询问 AI、单篇深度分析和故事生成会使用全局 `LLM_PROVIDER` 配置；Layer 1 批量情感分析可以通过 `LAYER1_LLM_*` 单独指定模型。例如：
+
+```env
+LLM_PROVIDER=siliconflow
+LLM_BASE_URL=https://api.siliconflow.cn/v1
+LLM_MODEL=stepfun-ai/Step-3.5-Flash
+
+LAYER1_LLM_PROVIDER=anthropic
+LAYER1_LLM_BASE_URL=https://api.minimaxi.com/anthropic
+LAYER1_LLM_MODEL=MiniMax-M2.5
+```
+
+也就是说，交互式分析走硅基流动，批量新闻情感分析走 MiniMax。
+
+### 查看量化策略回测结果
+
+扫描所有股票并生成最优策略：
+
+```powershell
+cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
+.\venv\Scripts\python.exe -m backend.ml.strategy_backtest --scan
+```
+
+查看单个策略，例如 `MU / T+5 / threshold=0.5`：
+
+```powershell
+.\venv\Scripts\python.exe -m backend.ml.strategy_backtest --symbol MU --horizon t5 --threshold 0.5
+```
+
+结果文件：
+
+```text
+backend/ml/models/strategy_best.json
+backend/ml/models/MU_t5_thr50_strategy_backtest.json
+```
+
+前端右侧切换到 `Strategy` 标签后，会读取这些结果并展示：
+
+- 年化收益率
+- 最大回撤
+- 累计收益率
+- 买入持有收益率
+- 胜率
+- 交易次数
+- 是否满足课程要求
+
+### 增量更新股票数据
+
+```bash
+.\venv\Scripts\python.exe -m backend.weekly_update
 ```
 
 ### 添加股票示例
 
 ```bash
 # 通过 API 添加股票
-curl -X POST http://localhost:8000/api/news \
+curl -X POST http://localhost:8000/api/stocks \
   -H "Content-Type: application/json" \
   -d '{"symbol": "AAPL", "name": "Apple Inc."}'
 ```
@@ -638,7 +798,8 @@ python -c "from backend.polygon.client import fetch_ohlc, fetch_news; ..."
 
 - 批量处理: 50篇/次 API 调用
 - 关键词提取: 长描述只保留相关内容
-- 批量 API: 支持 Anthropic 批量处理 (50% 折扣)
+- 默认使用 `.env` 中配置的 LLM，例如 `LLM_PROVIDER=siliconflow`
+- 批量 API: 仅在使用官方 Anthropic base URL 时使用 Anthropic 批量处理
 
 ## 许可证
 

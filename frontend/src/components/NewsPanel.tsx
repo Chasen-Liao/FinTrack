@@ -130,7 +130,7 @@ export default function NewsPanel({ symbol, hoveredDate, onFindSimilar, highligh
         <span className="news-date-badge">{displayDate}</span>
         <span className="news-count">{news.length} {t('news.articles')}</span>
         {isLocked && (
-          <button className="lock-badge" onClick={onUnlock} title="Click to unlock">
+          <button className="lock-badge" onClick={onUnlock} title={t('news.unlockTitle')}>
             {t('news.locked')}
           </button>
         )}
