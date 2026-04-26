@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "claude-context": {
+      "command": "node",
+      "args": ["D:/Chasen/claude-context/packages/mcp/dist/index.js"],
+      "env": {
+        "OPENAI_API_KEY": "sk-dsgdtybpzhaaojtigvpwdsxhfiwryqlulveunkhwuryxbbby",
+        "OPENAI_BASE_URL": "https://api.siliconflow.cn/v1/embeddings",
+        "EMBEDDING_MODEL": "Qwen/Qwen3-VL-Embedding-8B",
+        "EMBEDDING_PROVIDER": "OpenAI",
+        "MILVUS_ADDRESS": "https://in03-e79eedc9b582341.serverless.aws-eu-central-1.cloud.zilliz.com",
+        "MILVUS_TOKEN": "a5f72ba61e56940d3935a37db64354c483fd3b36701dabbb7b10c063e01373472deddd81f15a5512ecc90941d8ff10fd263e6ab0",
+        "SPLITTER_TYPE": "ast"
+      }
+    }
+  }
+}
