@@ -29,6 +29,7 @@ graph TB
 ## 核心特性
 
 - **多层级新闻分析**：Layer 0 规则过滤 → Layer 1 LLM 批量分析 → Layer 2 按需深度分析，成本可控
+- **一键拉取并分析新闻**：前端顶栏支持直接触发 fetch → 对齐 → Layer 0 → Batch Layer 1，并展示阶段状态与进度
 - **新闻-股价对齐**：自动将新闻映射到最近交易日，计算 T+0/1/3/5/10 收益
 - **AI 量化策略**：基于新闻情绪与价格特征的 XGBoost 预测模型，支持策略回测与最优参数扫描
 - **交互式可视化**：D3.js 粒子图、收益曲线、新闻热力图
@@ -170,7 +171,41 @@ cp .env.example .env            # 填入 POLYGON_API_KEY 与 LLM Key
 cd frontend
 npm run dev
 ```
-访问：http://127.0.0.1:5173/PokieTicker/
+访问：终端输出的 Vite 本地地址（通常为 `http://127.0.0.1:5173/PokieTicker/` 或 `http://localhost:7777/PokieTicker/`）
+
+### 顶栏一键“拉取并分析新闻”
+
+启动前后端后：
+
+1. 在顶栏选择股票代码
+2. 点击 `📰 Fetch & Analyze News`
+3. 系统会依次执行：
+    - Polygon 行情与新闻拉取
+    - 新闻与交易日对齐
+    - Layer 0 规则过滤
+    - Layer 1 Batch 提交与轮询
+4. 完成后自动刷新新闻面板、分类面板与图表粒子层
+
+状态卡会在顶栏显示当前阶段、已处理数量、相关文章数量和队列进度。
+
+### 环境变量与外部依赖
+
+要完整运行“一键拉取并分析新闻”，至少需要以下配置：
+
+- `polygon_api_key`：用于拉取 OHLC 与新闻数据
+- `anthropic_api_key`：用于 Layer 1 Batch 分析
+
+如果缺少或无效：
+
+- Polygon 不可用时，请求可能停留在拉取阶段或返回抓取错误
+- Anthropic 不可用时，后端会返回友好的失败状态，而不是 500 异常
+
+建议在项目根目录创建 `.env`：
+
+```env
+polygon_api_key=your_polygon_key
+anthropic_api_key=your_anthropic_key
+```
 
 ### 常用运维命令
 
