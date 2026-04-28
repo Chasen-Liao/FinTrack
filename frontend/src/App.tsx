@@ -13,6 +13,58 @@ import PredictionPanel from './components/PredictionPanel';
 import StrategyBacktestPanel from './components/StrategyBacktestPanel';
 import './App.css';
 
+interface PipelineBatchStatus {
+  batch_id: string;
+  status: string;
+  request_counts: {
+    processing: number;
+    succeeded: number;
+    errored: number;
+    canceled: number;
+    expired: number;
+  };
+  collect_stats?: {
+    processed: number;
+    relevant: number;
+    irrelevant: number;
+    errors: number;
+  };
+  stage?: string;
+  is_done?: boolean;
+}
+
+interface PipelineProcessResponse {
+  symbol: string;
+  mode: 'sync' | 'batch';
+  stage: string;
+  message: string;
+  is_done: boolean;
+  pending_articles?: number;
+  batch_id?: string | null;
+  batch?: PipelineBatchStatus | null;
+}
+
+interface PipelineTaskState {
+  visible: boolean;
+  isRunning: boolean;
+  stage: 'idle' | 'fetching' | 'submitting' | 'batch_running' | 'completed' | 'failed';
+  message: string;
+  batchId: string | null;
+  requestCounts: PipelineBatchStatus['request_counts'] | null;
+  processed: number;
+  total: number;
+  relevant: number;
+  errors: number;
+}
+
+const EMPTY_REQUEST_COUNTS: PipelineBatchStatus['request_counts'] = {
+  processing: 0,
+  succeeded: 0,
+  errored: 0,
+  canceled: 0,
+  expired: 0,
+};
+
 interface RangeSelection {
   startDate: string;
   endDate: string;
@@ -45,6 +97,19 @@ function App() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<ArticleSelection | null>(null);
   const [rightPanelMode, setRightPanelMode] = useState<'forecast' | 'strategy'>('forecast');
+  const [newsRefreshToken, setNewsRefreshToken] = useState(0);
+  const [pipelineTask, setPipelineTask] = useState<PipelineTaskState>({
+    visible: false,
+    isRunning: false,
+    stage: 'idle',
+    message: '',
+    batchId: null,
+    requestCounts: null,
+    processed: 0,
+    total: 0,
+    relevant: 0,
+    errors: 0,
+  });
 
   // Locked article state (click-to-lock)
   const [lockedArticle, setLockedArticle] = useState<ArticleSelection | null>(null);
@@ -57,6 +122,7 @@ function App() {
   // Chart area ref for popup positioning
   const chartAreaRef = useRef<HTMLDivElement>(null);
   const [chartRect, setChartRect] = useState<DOMRect | undefined>(undefined);
+  const pollingRef = useRef<number | null>(null);
 
   // Theme state
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -94,6 +160,14 @@ function App() {
         }
       })
       .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        window.clearInterval(pollingRef.current);
+      }
+    };
   }, []);
 
   // Update chartRect when range is selected (for popup positioning)
@@ -167,7 +241,30 @@ function App() {
     setActiveCategoryColor(color ?? null);
   }, []);
 
+  const clearPolling = useCallback(() => {
+    if (pollingRef.current) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
+
+  const resetPipelineTask = useCallback(() => {
+    setPipelineTask({
+      visible: false,
+      isRunning: false,
+      stage: 'idle',
+      message: '',
+      batchId: null,
+      requestCounts: null,
+      processed: 0,
+      total: 0,
+      relevant: 0,
+      errors: 0,
+    });
+  }, []);
+
   function handleSelectSymbol(symbol: string) {
+    clearPolling();
     setSelectedSymbol(symbol);
     setHoveredDate(null);
     setHoveredOhlc(null);
@@ -179,6 +276,7 @@ function App() {
     setActiveCategory(null);
     setActiveCategoryIds([]);
     setActiveCategoryColor(null);
+    resetPipelineTask();
   }
 
   function handleAddTicker(symbol: string) {
@@ -191,6 +289,124 @@ function App() {
   // Effective date for NewsPanel: locked takes priority
   const effectiveDate = lockedArticle?.date ?? hoveredDate;
   const isLocked = lockedArticle !== null;
+
+  const handleBatchStatus = useCallback((status: PipelineBatchStatus) => {
+    const counts = status.request_counts || EMPTY_REQUEST_COUNTS;
+    const collectStats = status.collect_stats;
+    const total = counts.processing + counts.succeeded + counts.errored + counts.canceled + counts.expired;
+    const isDone = Boolean(status.is_done);
+
+    setPipelineTask((prev) => ({
+      ...prev,
+      visible: true,
+      isRunning: !isDone,
+      stage: isDone ? 'completed' : 'batch_running',
+      message: isDone ? t('pipeline.statusCompleted') : t('pipeline.statusRunning'),
+      requestCounts: counts,
+      processed: collectStats?.processed ?? counts.succeeded,
+      total: prev.total || total,
+      relevant: collectStats?.relevant ?? prev.relevant,
+      errors: collectStats?.errors ?? counts.errored,
+    }));
+
+    if (isDone) {
+      clearPolling();
+      setNewsRefreshToken((prev) => prev + 1);
+    }
+  }, [clearPolling, t]);
+
+  const startBatchPolling = useCallback((batchId: string) => {
+    clearPolling();
+
+    const poll = () => {
+      axios
+        .get<PipelineBatchStatus>(`/api/pipeline/batch/${batchId}`)
+        .then((res) => handleBatchStatus(res.data))
+        .catch(() => {
+          clearPolling();
+          setPipelineTask((prev) => ({
+            ...prev,
+            visible: true,
+            isRunning: false,
+            stage: 'failed',
+            message: t('pipeline.statusFailed'),
+          }));
+        });
+    };
+
+    poll();
+    pollingRef.current = window.setInterval(poll, 4000);
+  }, [clearPolling, handleBatchStatus, t]);
+
+  const handleRunPipeline = useCallback(async () => {
+    if (!selectedSymbol || pipelineTask.isRunning) return;
+
+    clearPolling();
+    setPipelineTask({
+      visible: true,
+      isRunning: true,
+      stage: 'fetching',
+      message: t('pipeline.statusFetching'),
+      batchId: null,
+      requestCounts: null,
+      processed: 0,
+      total: 0,
+      relevant: 0,
+      errors: 0,
+    });
+
+    try {
+      const response = await fetch('/api/pipeline/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: selectedSymbol,
+          mode: 'batch',
+          include_fetch: true,
+        }),
+      });
+
+      const data = await response.json() as PipelineProcessResponse;
+      const total = data.pending_articles ?? 0;
+
+      setPipelineTask({
+        visible: true,
+        isRunning: Boolean(data.batch_id),
+        stage: data.batch_id ? 'submitting' : 'completed',
+        message: data.batch_id ? t('pipeline.statusSubmitted') : t('pipeline.noPending'),
+        batchId: data.batch_id ?? null,
+        requestCounts: data.batch?.request_counts ?? null,
+        processed: 0,
+        total,
+        relevant: 0,
+        errors: 0,
+      });
+
+      if (data.batch_id) {
+        startBatchPolling(data.batch_id);
+      } else {
+        setNewsRefreshToken((prev) => prev + 1);
+      }
+    } catch (error) {
+      console.error(error);
+      setPipelineTask({
+        visible: true,
+        isRunning: false,
+        stage: 'failed',
+        message: t('pipeline.statusFailed'),
+        batchId: null,
+        requestCounts: null,
+        processed: 0,
+        total: 0,
+        relevant: 0,
+        errors: 0,
+      });
+    }
+  }, [clearPolling, pipelineTask.isRunning, selectedSymbol, startBatchPolling, t]);
+
+  const pipelineProgress = pipelineTask.total > 0
+    ? Math.min(100, Math.round((pipelineTask.processed / pipelineTask.total) * 100))
+    : 0;
 
   // Right panel priority: rangeQuestion > rangeNews > selectedDay > default NewsPanel
   function renderRightPanel() {
@@ -234,6 +450,7 @@ function App() {
         <NewsPanel
           symbol={selectedSymbol}
           hoveredDate={effectiveDate}
+          refreshToken={newsRefreshToken}
           onFindSimilar={(_newsId: string) => {
             if (effectiveDate) handleDayClick(effectiveDate);
           }}
@@ -283,6 +500,40 @@ function App() {
             </span>
           </div>
         ) : null}
+        <div className="header-pipeline">
+          <button
+            className={`pipeline-action-btn ${pipelineTask.isRunning ? 'running' : ''}`}
+            onClick={handleRunPipeline}
+            disabled={!selectedSymbol || pipelineTask.isRunning}
+          >
+            <span className="pipeline-action-icon">📰</span>
+            <span>{pipelineTask.isRunning ? t('pipeline.running') : t('pipeline.run')}</span>
+          </button>
+          {pipelineTask.visible && (
+            <div className={`pipeline-status-card ${pipelineTask.stage}`}>
+              <div className="pipeline-status-top">
+                <span className={`pipeline-stage-badge ${pipelineTask.stage}`}>{t(`pipeline.stage.${pipelineTask.stage}`)}</span>
+                {pipelineTask.isRunning && <span className="pipeline-spinner" aria-hidden="true" />}
+              </div>
+              <div className="pipeline-status-text">{pipelineTask.message}</div>
+              <div className="pipeline-progress-meta">
+                <span>{t('pipeline.processedCount', { processed: pipelineTask.processed, total: pipelineTask.total })}</span>
+                <span>{t('pipeline.relevantCount', { count: pipelineTask.relevant })}</span>
+                {pipelineTask.errors > 0 && <span>{t('pipeline.errorCount', { count: pipelineTask.errors })}</span>}
+              </div>
+              <div className="pipeline-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pipelineProgress}>
+                <div className="pipeline-progress-fill" style={{ width: `${pipelineProgress}%` }} />
+              </div>
+              {pipelineTask.requestCounts && (
+                <div className="pipeline-request-grid">
+                  <span>{t('pipeline.queueProcessing', { count: pipelineTask.requestCounts.processing })}</span>
+                  <span>{t('pipeline.queueSucceeded', { count: pipelineTask.requestCounts.succeeded })}</span>
+                  <span>{t('pipeline.queueErrored', { count: pipelineTask.requestCounts.errored })}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <div className="header-right">
           <span className="header-link" style={{ cursor: 'default' }}>Chasen</span>
           <button
@@ -318,6 +569,7 @@ function App() {
             <>
               <CandlestickChart
                 symbol={selectedSymbol}
+                refreshToken={newsRefreshToken}
                 lockedNewsId={lockedArticle?.newsId ?? null}
                 highlightedArticleIds={activeCategoryIds.length > 0 ? activeCategoryIds : null}
                 highlightColor={activeCategoryColor}
@@ -373,6 +625,7 @@ function App() {
           {selectedSymbol && (
             <NewsCategoryPanel
               symbol={selectedSymbol}
+              refreshToken={newsRefreshToken}
               activeCategory={activeCategory}
               onCategoryChange={handleCategoryChange}
             />

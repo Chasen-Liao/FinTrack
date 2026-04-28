@@ -1,819 +1,217 @@
-# FinTrack - 智能股票新闻分析系统
+# FinTrack - 智能股票新闻分析与量化交易系统
+
+> 基于 AI 的股票新闻分析系统，将新闻与股价走势关联，实现智能选股决策支持。
 
 ![总览](image-4.png)
-
-> 基于 AI 的股票新闻分析系统，将新闻与股价走势关联，实现智能选股决策支持
-
-![1](image/新闻.png)
-
-基于LLM的区间分析：
-![2](image/区间分析.png)
-
-
+![新闻面板](image/新闻.png)
+![区间分析](image/区间分析.png)
 
 ## 系统概览
 
-FinTrack 是一个端到端的股票新闻分析平台，通过多层级 AI 管道将海量新闻数据转化为可操作的交易 insights。
+FinTrack 是一个端到端的股票新闻分析与量化交易平台，通过多层级 AI 管道将海量新闻数据转化为可执行的交易信号。
 
 ```mermaid
 graph TB
-    subgraph 数据源
-        POL[Polygon.io<br/>股票API]
-    end
-
-    subgraph 后端架构
-        FE[FastAPI]
-        DB[(SQLite)]
-    end
-
-    subgraph 数据采集层
-        P1[fetch_ohlc<br/>K线数据]
-        P2[fetch_news<br/>新闻数据]
-    end
-
-    subgraph 数据处理管道
-        L0[Layer 0<br/>规则过滤]
-        L1[Layer 1<br/>LLM批量分析]
-        L2[Layer 2<br/>深度分析]
-        ALIGN[新闻对齐<br/>收益计算]
-    end
-
-    subgraph ML预测层
-        FEAT[特征工程]
-        MODEL[XGBoost预测]
-    end
-
-    subgraph 前端
-        REACT[React + TypeScript<br/>D3.js可视化]
-    end
-
-    POL --> P1
-    POL --> P2
-    P1 --> DB
+    POL[Polygon.io] --> P1[fetch_ohlc]
+    POL --> P2[fetch_news]
+    P1 --> DB[(SQLite)]
     P2 --> DB
-    DB --> L0
-    L0 --> L1
-    L1 --> L2
-    L1 -.-> ALIGN
+    DB --> L0[Layer 0 规则过滤]
+    L0 --> L1[Layer 1 LLM批量分析]
+    L1 --> L2[Layer 2 深度分析]
+    L1 -.-> ALIGN[新闻对齐 & 收益计算]
     ALIGN --> DB
-    DB --> FEAT
-    FEAT --> MODEL
-    FE --> REACT
+    DB --> FEAT[特征工程]
+    FEAT --> MODEL[XGBoost 预测]
+    FE --> REACT[React + D3.js]
 ```
 
 ## 核心特性
 
-- **多层级新闻分析**: 从规则过滤到 LLM 深度分析，成本可控
-- **新闻-股价对齐**: 自动将新闻对齐到交易日，计算 T+0/1/3/5/10 收益
-- **智能选股推荐**: 基于历史新闻与价格关系的 ML 预测模型
-- **实时数据更新**: 后台定时抓取最新市场数据
-- **交互式可视化**: D3.js 粒子图、收益曲线、新闻热力图
+- **多层级新闻分析**：Layer 0 规则过滤 → Layer 1 LLM 批量分析 → Layer 2 按需深度分析，成本可控
+- **新闻-股价对齐**：自动将新闻映射到最近交易日，计算 T+0/1/3/5/10 收益
+- **AI 量化策略**：基于新闻情绪与价格特征的 XGBoost 预测模型，支持策略回测与最优参数扫描
+- **交互式可视化**：D3.js 粒子图、收益曲线、新闻热力图
 
 ## 系统架构
 
-### 整体架构图
-
 ```mermaid
 flowchart TB
-    subgraph 客户端层
-        UI[React Frontend<br/>localhost:5173]
-    end
-
-    subgraph API网关层
-        FAST[FastAPI Server<br/>localhost:8000]
-        CORS[CORS Middleware]
-    end
-
-    subgraph 核心服务层
-        STOCKS[stocks.py<br/>股票数据API]
-        NEWS[news.py<br/>新闻数据API]
-        ANALYSIS[analysis.py<br/>分析API]
-        PREDICT[predict.py<br/>预测API]
-    end
-
-    subgraph 业务逻辑层
-        PIPE[处理管道<br/>pipeline/]
-        ML[机器学习<br/>ml/]
-        LLM[LLM客户端<br/>llm/]
-    end
-
-    subgraph 数据访问层
-        DB[(SQLite<br/>FinTrack.db)]
-        POL[Polygon API]
-    end
-
-    UI --> CORS
-    CORS --> FAST
-    FAST --> STOCKS
-    FAST --> NEWS
-    FAST --> ANALYSIS
-    FAST --> PREDICT
-
-    STOCKS --> DB
+    UI[React Frontend] --> FAST[FastAPI]
+    FAST --> STOCKS[stocks.py]
+    FAST --> NEWS[news.py]
+    FAST --> ANALYSIS[analysis.py]
+    FAST --> PREDICT[predict.py]
+    STOCKS --> DB[(SQLite)]
     NEWS --> DB
-    ANALYSIS --> PIPE
-    ANALYSIS --> ML
-    ANALYSIS --> LLM
+    ANALYSIS --> PIPE[pipeline/]
+    ANALYSIS --> ML[ml/]
+    ANALYSIS --> LLM[llm/]
     PREDICT --> ML
-
     PIPE --> DB
-    LLM --> POL
+    LLM --> POL[Polygon API]
     ML --> DB
 ```
 
-### API 路由结构
+## 数据流与新闻处理管道
 
 ```mermaid
 flowchart LR
-    subgraph /api/stocks
-        S1["GET /{symbol}<br/>获取新闻"]
-        S2["GET /{symbol}/range<br/>日期范围查询"]
-        S3["GET /{symbol}/particles<br/>粒子数据"]
-        S4["GET /{symbol}/categories<br/>分类统计"]
-        S5["GET /{symbol}/timeline<br/>时间线"]
-    end
-
-    subgraph /api/news
-        N1["GET /<br/>股票列表"]
-        N2["GET /search<br/>搜索"]
-        N3["GET /{symbol}/ohlc<br/>K线数据"]
-        N4["POST /<br/>添加股票"]
-    end
-
-    subgraph /api/analysis
-        A1["POST /deep<br/>深度分析"]
-        A2["POST /story<br/>生成故事"]
-        A3["POST /range<br/>区间分析"]
-        A4["POST /similar<br/>相似新闻"]
-    end
-
-    subgraph /api/predict
-        P1["预测相关接口"]
-    end
+    NEWS[Polygon News] --> L0[Layer 0 规则过滤]
+    L0 --> L1[Layer 1 LLM 批量分析<br/>50篇/批]
+    L1 --> L2[Layer 2 深度分析<br/>按需触发]
+    L2 --> ALIGN[新闻对齐交易日<br/>计算 T+0/1/3/5/10 收益]
+    ALIGN --> FEAT[特征工程]
+    FEAT --> MODEL[XGBoost 分类]
+    MODEL --> SIG[交易信号<br/>prob_up >= threshold]
+    SIG --> BT[策略回测<br/>年化收益 / 最大回撤]
 ```
 
-## 数据流架构
+## 金融算法实现
 
-### 新闻处理管道
+### 1. 特征工程 (`backend/ml/features.py`)
 
-```mermaid
-flowchart LR
-    subgraph 输入
-        NEWS[Polygon News<br/>原始新闻]
-    end
+特征矩阵以**每个交易日**为一条样本，严格使用 `shift(1)` 避免前视偏差。
 
-    subgraph Layer 0 规则过滤
-        R1[空描述检查]
-        R2[长度检查]
-        R3[市场汇总过滤]
-        R4[列表文章过滤]
-    end
-
-    subgraph Layer 1 LLM批量分析
-        E1[关键词提取]
-        E2[50篇/批]
-        E3[相关性判断]
-        E4[情感分析]
-    end
-
-    subgraph Layer 2 深度分析
-        D1[按需触发]
-        D2[详细分析]
-        D3[原因归因]
-    end
-
-    subgraph 收益计算
-        RET[对齐交易日<br/>计算T+0/1/3/5/10收益]
-    end
-
-    NEWS --> R1
-    R1 --> R2
-    R2 --> R3
-    R3 --> R4
-    R4 --> E1
-    E1 --> E2
-    E2 --> E3
-    E3 --> E4
-    E4 --> D1
-    D1 --> D2
-    D2 --> D3
-    D3 --> RET
-
-    style R1 fill:#e1f5fe
-    style E2 fill:#fff3e0
-    style D2 fill:#e8f5e9
-    style RET fill:#fce4ec
-```
-
-### 新闻-股价对齐流程
-
-```mermaid
-sequenceDiagram
-    participant N as News_raw
-    participant O as OHLC
-    participant A as news_aligned
-
-    N->>O: 查询published_utc
-    O->>A: 找到最近交易日
-
-    Note over A: 计算收益率
-    Note over A: T+0: 前一日收盘→当日收盘
-    Note over A: T+1: 当日收盘→T+1收盘
-    Note over A: T+3: 当日收盘→T+3收盘
-    Note over A: T+5: 当日收盘→T+5收盘
-    Note over A: T+10: 当日收盘→T+10收盘
-
-    A->>A: 存储对齐结果
-```
-
-## 数据库架构
-
-```mermaid
-erDiagram
-    tickers ||--o{ ohlc : "has"
-    tickers ||--o{ news_ticker : "mentioned_in"
-    news_raw ||--o{ news_ticker : "has"
-    news_raw ||--o{ layer0_results : "filtered_by"
-    news_raw ||--o{ layer1_results : "analyzed_by"
-    news_raw ||--o{ layer2_results : "deep_analyzed"
-    news_raw ||--o{ news_aligned : "aligned_to"
-
-    tickers {
-        string symbol PK
-        string name
-        string sector
-        string last_ohlc_fetch
-        string last_news_fetch
-    }
-
-    ohlc {
-        string symbol PK,FK
-        string date PK
-        float open
-        float high
-        float low
-        float close
-        float volume
-        float vwap
-        int transactions
-    }
-
-    news_raw {
-        string id PK
-        string title
-        string description
-        string publisher
-        string author
-        string published_utc
-        string article_url
-        string amp_url
-        string tickers_json
-        string insights_json
-    }
-
-    news_ticker {
-        string news_id PK,FK
-        string symbol PK,FK
-    }
-
-    layer0_results {
-        string news_id PK,FK
-        string symbol PK,FK
-        int passed
-        string reason
-    }
-
-    layer1_results {
-        string news_id PK,FK
-        string symbol PK,FK
-        string relevance
-        string key_discussion
-        string chinese_summary
-        string sentiment
-        string discussion
-        string reason_growth
-        string reason_decrease
-    }
-
-    layer2_results {
-        string news_id PK,FK
-        string symbol PK,FK
-        string discussion
-        string growth_reasons
-        string decrease_reasons
-        string created_at
-    }
-
-    news_aligned {
-        string news_id PK,FK
-        string symbol PK,FK
-        string trade_date PK
-        string published_utc
-        float ret_t0
-        float ret_t1
-        float ret_t3
-        float ret_t5
-        float ret_t10
-    }
-```
-
-## 模块说明
-
-### 1. 数据采集层 (`backend/polygon/`)
-
-| 模块 | 功能 |
+**新闻情绪特征**
+| 特征 | 说明 |
 |------|------|
-| `client.py` | Polygon.io API 封装 |
+| `sentiment_score` | (正面数 − 负面数) / 总文章数 |
+| `relevance_ratio` | 高/中相关文章占比 |
+| `positive_ratio` / `negative_ratio` | 正面/负面文章占比 |
+| `sentiment_score_3d/5d/10d` | 滚动平均情绪得分 |
+| `sentiment_momentum_3d` | 3 日情绪均值 − 10 日情绪均值 |
+| `news_count_3d/5d/10d` | 滚动窗口新闻总量 |
 
-**核心函数**:
-
-```python
-# 获取K线数据
-fetch_ohlc(ticker: str, start: str, end: str) -> List[Dict]
-
-# 获取新闻数据
-fetch_news(ticker: str, start: str, end: str) -> List[Dict]
-
-# 搜索股票
-search_tickers(query: str, limit: int) -> List[Dict]
-```
-
-### 2. 处理管道层 (`backend/pipeline/`)
-
-#### Layer 0: 规则过滤 (`layer0.py`)
-
-免费层，使用规则过滤明显无关的新闻：
-
-- 空描述过滤
-- 描述过短过滤 (<30字符)
-- 市场汇总文章过滤 (>10只股票)
-- 列表文章过滤 (如"Top 10...")
-
-**预期过滤率**: 25-35%
-
-#### Layer 1: LLM批量分析 (`layer1.py`)
-
-低成本层，50篇新闻打包一次 API 调用：
-
-```python
-# 关键词提取
-_extract_relevant_text(description, symbol)
-
-# 批量处理
-run_layer1(symbol: str, max_articles: int) -> Dict
-
-# 批量API (可选)
-submit_batch_api(symbol: str, articles: List) -> str
-```
-
-**输出格式**:
-```json
-{
-  "i": 0,
-  "r": "y|n",           // 是否相关
-  "s": "+|-0",          // 情感
-  "e": "10词摘要",
-  "u": "上涨原因",
-  "d": "下跌原因"
-}
-```
-
-#### Layer 2: 深度分析 (`layer2.py`)
-
-按需层，用户点击文章时触发：
-
-```python
-# 单篇文章深度分析
-analyze_article(news_id: str, symbol: str) -> Dict
-
-# 生成股票故事
-generate_story(symbol: str, csv_content: str) -> str
-
-# 区间分析
-analyze_range(symbol, start_date, end_date) -> Dict
-```
-
-#### 新闻对齐 (`alignment.py`)
-
-将新闻发布时间映射到最近的交易日：
-
-```python
-align_news_for_symbol(symbol: str) -> Dict
-# 计算 T+0, T+1, T+3, T+5, T+10 收益率
-```
-
-### 3. 机器学习层 (`backend/ml/`)
-
-| 模块 | 功能 |
+**价格与技术特征**
+| 特征 | 说明 |
 |------|------|
-| `model.py` | XGBoost 训练与预测 |
-| `features.py` | 特征工程 |
-| `backtest.py` | 回测模块 |
-| `inference.py` | 推理接口 |
-| `lstm_model.py` | LSTM实验模型 |
+| `ret_1d/3d/5d/10d` | 历史收益率（已 shift(1)） |
+| `volatility_5d/10d` | 滚动波动率 |
+| `volume_ratio_5d` | 当日成交量 / 5 日均量 |
+| `gap` | 开盘跳空率 |
+| `ma5_vs_ma20` | 均线偏离度 |
+| `rsi_14` | 14 日 RSI |
+| `day_of_week` | 星期几（季节因子） |
 
-**特征工程** (`features.py`):
-- 价格技术指标 (RSI, MACD, 布林带)
-- 波动率特征
-- 成交量特征
-- 新闻情绪特征
+**目标变量**
+- `target_t1`：次日收盘是否上涨（二分类）
+- `target_t5`：5 日后收盘是否上涨（二分类）
 
-**模型训练**:
-```python
-# 单股模型
-train(symbol: str, horizon: str) -> Dict
+### 2. 模型训练 (`backend/ml/model.py`)
 
-# 统一模型 (多股合并)
-train_unified(horizon: str, symbols: List) -> Dict
-
-# 预测
-predict(symbol: str, horizon: str) -> Dict
-```
-
-### 4. API 层 (`backend/api/routers/`)
-
-#### stocks.py - 股票数据接口
+采用 **XGBoost 分类器**，支持单股模型与统一模型（多股合并）：
 
 ```python
-GET /api/stocks/{symbol}           # 获取新闻
-GET /api/stocks/{symbol}/range     # 日期范围查询
-GET /api/stocks/{symbol}/particles # 粒子可视化数据
-GET /api/stocks/{symbol}/categories# 新闻分类
-GET /api/stocks/{symbol}/timeline  # 时间线标记
+XGBClassifier(
+    max_depth=4,
+    n_estimators=200,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    eval_metric="logloss",
+)
 ```
 
-#### news.py - 新闻数据接口
+- **数据分割**：按时间序列顺序划分，前 80% 训练，后 20% 测试，避免未来信息泄露
+- **评估指标**：Accuracy、Precision、Recall、F1，并与基线（多数类占比）对比
+- **模型持久化**：训练完成后保存为 `.joblib`，元数据（特征重要性、训练区间等）保存为 `.json`
 
-```python
-GET  /api/news                    # 股票列表
-GET  /api/news/search             # 模糊搜索
-GET  /api/news/{symbol}/ohlc      # K线数据
-POST /api/news                    # 添加股票(触发后台抓取)
+### 3. 策略回测 (`backend/ml/strategy_backtest.py`)
+
+将模型输出的上涨概率 `prob_up` 转换为**long/cash 交易信号**：
+
+```
+signal = 1  if prob_up >= threshold  else 0
 ```
 
-#### analysis.py - 分析接口
+**权益曲线模拟**
+- 初始资金 1.0，信号生效于次日开盘至再下一日开盘
+- 每次换仓收取 `fee_rate = 0.1%` 手续费
+- 持仓日收益 = 当日收盘价 / 前日收盘价 − 1
 
-```python
-POST /api/analysis/deep           # 深度分析
-POST /api/analysis/story          # 生成故事
-POST /api/analysis/range          # 区间分析
-POST /api/analysis/range-local    # 本地分析(免费)
-POST /api/analysis/similar        # 相似新闻
-```
+**核心评价指标**
+| 指标 | 计算方式 |
+|------|----------|
+| 年化收益率 | $(E_{end}/E_{start})^{1/years} - 1$，按 252 交易日/年 |
+| 最大回撤 | $\max\{(peak - equity)/peak\}$ |
+| 胜率 | 盈利交易次数 / 总交易次数 |
+| 累计收益率 | $E_{end} / E_{start} - 1$ |
+| 买入持有收益率 | 同期单纯持有股票的收益率 |
 
-#### predict.py - 预测接口
-
-```python
-# 预测相关端点
-```
-
-### 5. LLM 客户端 (`backend/llm/`)
-
-统一支持多种 LLM 提供商：
-
-```python
-# 配置
-llm_provider: "siliconflow" | "anthropic"
-
-# SiliconFlow 模型
-- deepseek-ai/DeepSeek-R1
-- deepseek-ai/DeepSeek-V3
-- Qwen/Qwen2.5-72B-Instruct
-
-# Anthropic 模型
-- claude-haiku-4-5-20251001
-- claude-sonnet-4-5-20250929
-```
+**最优策略扫描**
+- 支持对多只股票、多阈值（0.50/0.55/0.60/0.65/0.70）、多 horizon（t1/t5）进行批量回测
+- 选择满足课程目标（年化收益 > 20% 且最大回撤 < 20%）的最优策略写入 `strategy_best.json`
 
 ## 快速开始
 
 ### 环境要求
-
 - Python 3.10+
 - Node.js 18+
-- SQLite3
 
 ### 安装
-
 ```bash
-# 1. 克隆项目
-git clone <repo-url>
-cd FinTrack
-
-# 2. 创建虚拟环境
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或
-venv\Scripts\activate     # Windows
-
-# 3. 安装依赖
+venv\Scripts\activate          # Windows
 pip install -r requirements.txt
-
-# 4. 配置环境变量
-cp .env.example .env
-# 编辑 .env 填入 API Key
-```
-
-### 配置 (.env)
-
-```env
-# Polygon.io API (必需)
-POLYGON_API_KEY=your_polygon_api_key
-
-# LLM 提供商 (二选一)
-# SiliconFlow (推荐，性价比高)
-SILICONFLOW_API_KEY=your_siliconflow_key
-
-# 或 Anthropic
-ANTHROPIC_API_KEY=your_anthropic_key
-
-# LLM 选择
-LLM_PROVIDER=siliconflow
+cp .env.example .env            # 填入 POLYGON_API_KEY 与 LLM Key
 ```
 
 ### 启动服务
 
-后端必须在项目根目录启动，这样 Python 才能正确导入 `backend.*` 模块。
-
-#### 1. 启动后端 FastAPI
-
-PowerShell:
-
+**后端**（项目根目录）
 ```powershell
-cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
 .\venv\Scripts\python.exe -m uvicorn backend.api.main:app --host 127.0.0.1 --port 8000
 ```
+访问：http://127.0.0.1:8000/docs
 
-启动后访问：
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-#### 2. 启动前端 Vite
-
-PowerShell:
-
+**前端**
 ```powershell
-cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker\frontend
+cd frontend
 npm run dev
 ```
+访问：http://127.0.0.1:5173/PokieTicker/
 
-如果本机没有配置 `npm`，也可以直接使用 Node 启动 Vite：
+### 常用运维命令
 
-```powershell
-cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker\frontend
-C:\Users\25588\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 5173
-```
-
-启动后访问：
-
-```text
-http://127.0.0.1:5173/PokieTicker/
-```
-
-如果 Vite 使用配置文件中的默认端口 `7777`，则访问：
-
-```text
-http://127.0.0.1:7777/PokieTicker/
-```
-
-### 更新数据资源
-
-数据资源分两部分更新：先从 Polygon.io 更新行情和新闻，再对新增新闻执行 AI 情感分析。运行下面命令前，请确认 `.env` 中已经配置 `POLYGON_API_KEY` 和可用的 LLM Key。
-
-#### 1. 添加或更新单只股票
-
-前端添加股票会调用后端 `POST /api/stocks`，后端会在后台抓取最近约 2 年的 OHLC 和新闻：
-
-```powershell
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/stocks" `
-  -ContentType "application/json" `
-  -Body '{"symbol":"AAPL","name":"Apple Inc."}'
-```
-
-也可以直接在前端搜索并添加股票。抓取完成后，数据会写入本地 SQLite：`ohlc`、`news_raw`、`news_ticker`，并更新 `tickers.last_ohlc_fetch` 和 `tickers.last_news_fetch`。
-
-#### 2. 批量补齐未抓取股票
-
-如果数据库里有很多 ticker 还没有行情数据，使用批量抓取脚本：
-
-```powershell
-cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
-.\venv\Scripts\python.exe -m backend.bulk_fetch
-```
-
-该脚本会为 `last_ohlc_fetch IS NULL` 的股票抓取最近约 2 年的 OHLC 和新闻，并执行新闻交易日对齐与 Layer 0 规则过滤。
-
-#### 3. 增量更新已有股票
-
-日常更新使用增量脚本：
-
-```powershell
-cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
-.\venv\Scripts\python.exe -m backend.weekly_update
-```
-
-它会根据每只股票的 `last_ohlc_fetch`、`last_news_fetch`，只抓取上次更新时间之后的新 OHLC 和新闻。抓到新新闻后，会执行：
-
-- `align_news_for_symbol(symbol)`：把新闻对齐到交易日并计算 `T+0/T+1/T+3/T+5/T+10` 收益。
-- `run_layer0(symbol)`：过滤空摘要、过短摘要、市场综述和榜单类新闻。
-
-如需定时运行，可用系统计划任务或 cron。项目自身没有内置常驻调度器。
-
-#### 4. 更新 AI 新闻情感分析
-
-行情和新闻更新后，新增新闻只会完成对齐和 Layer 0 过滤；情感分析需要单独运行 Layer 1。单只股票示例：
-
-```powershell
-cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
-.\venv\Scripts\python.exe -c "from backend.pipeline.layer1 import run_layer1; print(run_layer1('AAPL', max_articles=1000))"
-```
-
-Layer 1 会把通过规则过滤、但尚未分析过的新闻按 50 篇一组发送给 LLM，要求返回相关性、情感方向、摘要、上涨原因和下跌原因。结果写入 `layer1_results`，前端新闻面板、粒子图和区间分析会读取这些结果。
-
-如果要分析其他股票，把命令中的 `AAPL` 换成对应 ticker。`max_articles` 可按预算调小或调大。
-
-如果要按当前 `.env` 配置批量处理多个股票，运行：
-
-```powershell
-cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
-.\venv\Scripts\python.exe -m backend.batch_submit --top 50
-```
-
-为控制 token 消耗，可以先限制每只股票处理的新闻数：
-
-```powershell
-.\venv\Scripts\python.exe -m backend.batch_submit --top 5 --max-per-symbol 50
-```
-
-默认情况下，区间询问 AI、单篇深度分析和故事生成会使用全局 `LLM_PROVIDER` 配置；Layer 1 批量情感分析可以通过 `LAYER1_LLM_*` 单独指定模型。例如：
-
-```env
-LLM_PROVIDER=siliconflow
-LLM_BASE_URL=https://api.siliconflow.cn/v1
-LLM_MODEL=stepfun-ai/Step-3.5-Flash
-
-LAYER1_LLM_PROVIDER=anthropic
-LAYER1_LLM_BASE_URL=https://api.minimaxi.com/anthropic
-LAYER1_LLM_MODEL=MiniMax-M2.5
-```
-
-也就是说，交互式分析走硅基流动，批量新闻情感分析走 MiniMax。
-
-### 查看量化策略回测结果
-
-扫描所有股票并生成最优策略：
-
-```powershell
-cd E:\MyProjects\Agent_Projects\pokieticker\PokieTicker
-.\venv\Scripts\python.exe -m backend.ml.strategy_backtest --scan
-```
-
-查看单个策略，例如 `MU / T+5 / threshold=0.5`：
-
-```powershell
-.\venv\Scripts\python.exe -m backend.ml.strategy_backtest --symbol MU --horizon t5 --threshold 0.5
-```
-
-结果文件：
-
-```text
-backend/ml/models/strategy_best.json
-backend/ml/models/MU_t5_thr50_strategy_backtest.json
-```
-
-前端右侧切换到 `Strategy` 标签后，会读取这些结果并展示：
-
-- 年化收益率
-- 最大回撤
-- 累计收益率
-- 买入持有收益率
-- 胜率
-- 交易次数
-- 是否满足课程要求
-
-### 增量更新股票数据
-
-```bash
-.\venv\Scripts\python.exe -m backend.weekly_update
-```
-
-### 添加股票示例
-
-```bash
-# 通过 API 添加股票
-curl -X POST http://localhost:8000/api/stocks \
-  -H "Content-Type: application/json" \
-  -d '{"symbol": "AAPL", "name": "Apple Inc."}'
-```
+| 操作 | 命令 |
+|------|------|
+| 批量补齐未抓取股票 | `python -m backend.bulk_fetch` |
+| 增量更新已有股票 | `python -m backend.weekly_update` |
+| 单股 Layer 1 情感分析 | `python -c "from backend.pipeline.layer1 import run_layer1; run_layer1('AAPL')"` |
+| 批量 Layer 1 分析 | `python -m backend.batch_submit --top 50` |
+| 策略回测扫描 | `python -m backend.ml.strategy_backtest --scan` |
+| 查看单策略详情 | `python -m backend.ml.strategy_backtest --symbol MU --horizon t5 --threshold 0.5` |
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
-| 后端框架 | FastAPI |
-| 前端框架 | React + TypeScript |
-| 可视化 | D3.js |
-| 数据库 | SQLite (WAL模式) |
-| ML 框架 | XGBoost, Scikit-learn, NumPy |
+| 后端 | FastAPI + SQLite (WAL) |
+| 前端 | React 19 + TypeScript + Vite + D3.js |
+| 机器学习 | XGBoost + Scikit-learn + NumPy + Pandas |
 | 数据源 | Polygon.io |
-| LLM | SiliconFlow / Anthropic |
-
-## 成本优化策略
-
-```mermaid
-flowchart TB
-    subgraph 成本层级
-        FREE[Layer 0<br/>规则过滤<br/>$0]
-        CHEAP[Layer 1<br/>批量分析<br/>~$0.002/篇]
-        EXPENSIVE[Layer 2<br/>深度分析<br/>~$0.01/篇]
-    end
-
-    FREE --> |"35%过滤"| CHEAP
-    CHEAP --> |"用户点击"| EXPENSIVE
-
-    Note over FREE: 零成本
-    Note over CHEAP: 批量折扣50%
-    Note over EXPENSIVE: 按需触发
-```
+| LLM | SiliconFlow / Anthropic / MiniMax |
 
 ## 目录结构
 
 ```
 FinTrack/
 ├── backend/
-│   ├── api/
-│   │   ├── main.py              # FastAPI 应用入口
-│   │   └── routers/
-│   │       ├── stocks.py        # 股票数据API
-│   │       ├── news.py          # 新闻数据API
-│   │       ├── analysis.py      # 分析API
-│   │       └── predict.py       # 预测API
-│   ├── pipeline/
-│   │   ├── layer0.py            # 规则过滤
-│   │   ├── layer1.py            # LLM批量分析
-│   │   ├── layer2.py            # 深度分析
-│   │   ├── alignment.py         # 新闻对齐
-│   │   └── similarity.py        # 相似度检索
-│   ├── ml/
-│   │   ├── model.py             # XGBoost模型
-│   │   ├── features.py          # 特征工程
-│   │   ├── backtest.py          # 回测
-│   │   └── models/              # 模型文件
-│   ├── polygon/
-│   │   └── client.py            # Polygon API封装
-│   ├── llm/
-│   │   └── client.py            # LLM统一客户端
-│   ├── database.py              # SQLite数据库
-│   └── config.py                # 配置管理
-├── frontend/
-│   ├── src/
-│   │   ├── components/          # React组件
-│   │   ├── pages/               # 页面
-│   │   └── utils/               # 工具函数
-│   └── package.json
-├── .env                         # 环境变量
-└── README.md                    # 本文档
+│   ├── api/routers/          # FastAPI 路由
+│   ├── pipeline/             # 新闻处理管道 (L0/L1/L2/对齐)
+│   ├── ml/                   # 特征工程、训练、推理、回测
+│   ├── polygon/              # Polygon API 封装
+│   └── llm/                  # LLM 统一客户端
+├── frontend/src/             # React 页面与组件
+├── tests/                    # 测试
+└── doc/                      # 课程文档与报告
 ```
-
-## 常见问题
-
-### Q: 如何添加新的股票?
-
-```bash
-# 方式1: API
-POST /api/news {"symbol": "NVDA"}
-
-# 方式2: 代码
-python -c "from backend.polygon.client import fetch_ohlc, fetch_news; ..."
-```
-
-### Q: 为什么不使用 PostgreSQL?
-
-当前使用 SQLite 是为了简化部署。对于生产环境，可以迁移到 PostgreSQL。
-
-### Q: Layer 1 如何降低成本?
-
-- 批量处理: 50篇/次 API 调用
-- 关键词提取: 长描述只保留相关内容
-- 默认使用 `.env` 中配置的 LLM，例如 `LLM_PROVIDER=siliconflow`
-- 批量 API: 仅在使用官方 Anthropic base URL 时使用 Anthropic 批量处理
 
 ## 许可证
 
 MIT License
 
-## 贡献指南
-
-欢迎提交 Issue 和 Pull Request！
-
 ---
-
-**技术栈版本** (供参考):
-- Python: 3.10+
-- FastAPI: 0.100+
-- React: 18+
-- Node.js: 18+
-- XGBoost: 2.0+
+> 作者：Chasen ；欢迎交流
+---

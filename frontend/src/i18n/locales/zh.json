@@ -11,6 +11,30 @@
     "aiForecast": "AI 预测",
     "strategy": "策略"
   },
+  "pipeline": {
+    "run": "拉取并分析新闻",
+    "running": "处理中...",
+    "statusFetching": "正在拉取新闻、行情并完成对齐",
+    "statusSubmitted": "已提交批量分析任务，正在轮询进度",
+    "statusRunning": "LLM 批量分析进行中",
+    "statusCompleted": "批量分析完成，已刷新新闻面板",
+    "statusFailed": "任务失败，请稍后重试",
+    "noPending": "没有待分析新闻，已刷新当前面板",
+    "processedCount": "已处理 {{processed}} / {{total}}",
+    "relevantCount": "相关 {{count}}",
+    "errorCount": "错误 {{count}}",
+    "queueProcessing": "处理中 {{count}}",
+    "queueSucceeded": "成功 {{count}}",
+    "queueErrored": "失败 {{count}}",
+    "stage": {
+      "idle": "待命",
+      "fetching": "拉取中",
+      "submitting": "已提交",
+      "batch_running": "分析中",
+      "completed": "已完成",
+      "failed": "失败"
+    }
+  },
   "chart": {
     "open": "开",
     "high": "高",

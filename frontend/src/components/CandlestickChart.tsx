@@ -45,6 +45,7 @@ interface ArticleSelection {
 
 interface Props {
   symbol: string;
+  refreshToken?: number;
   lockedNewsId?: string | null;
   highlightedArticleIds?: string[] | null;
   highlightColor?: string | null;
@@ -87,7 +88,7 @@ interface PlacedParticle extends Particle {
   alpha: number;
 }
 
-export default function CandlestickChart({ symbol, lockedNewsId, highlightedArticleIds, highlightColor, zoomRange, onZoomReset, onHover, onRangeSelect, onArticleSelect, onDayClick }: Props) {
+export default function CandlestickChart({ symbol, refreshToken = 0, lockedNewsId, highlightedArticleIds, highlightColor, zoomRange, onZoomReset, onHover, onRangeSelect, onArticleSelect, onDayClick }: Props) {
   const { t } = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -214,7 +215,7 @@ export default function CandlestickChart({ symbol, lockedNewsId, highlightedArti
       })
       .catch((err) => console.error('Chart error:', err))
       .finally(() => setLoading(false));
-  }, [symbol]);
+  }, [symbol, refreshToken]);
 
   useEffect(() => {
     if (ohlcRowsRef.current.length === 0) return;

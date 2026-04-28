@@ -18,6 +18,7 @@ interface CategoriesResponse {
 
 interface Props {
   symbol: string;
+  refreshToken?: number;
   activeCategory: string | null;
   onCategoryChange: (category: string | null, articleIds: string[], color?: string) => void;
 }
@@ -33,7 +34,7 @@ const CATEGORY_META: Record<string, { icon: string; labelKey: string; color: str
 
 type SentimentFilter = 'all' | 'positive' | 'negative';
 
-export default function NewsCategoryPanel({ symbol, activeCategory, onCategoryChange }: Props) {
+export default function NewsCategoryPanel({ symbol, refreshToken = 0, activeCategory, onCategoryChange }: Props) {
   const { t } = useTranslation();
   const [categories, setCategories] = useState<Record<string, CategoryInfo>>({});
   const [sentimentFilter, setSentimentFilter] = useState<SentimentFilter>('all');
@@ -44,7 +45,7 @@ export default function NewsCategoryPanel({ symbol, activeCategory, onCategoryCh
       .get<CategoriesResponse>(`/api/news/${symbol}/categories`)
       .then((res) => setCategories(res.data.categories))
       .catch(() => setCategories({}));
-  }, [symbol]);
+  }, [symbol, refreshToken]);
 
   // Reset sentiment sub-filter when category changes
   useEffect(() => {

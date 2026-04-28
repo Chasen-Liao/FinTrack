@@ -11,6 +11,30 @@
     "aiForecast": "AI Forecast",
     "strategy": "Strategy"
   },
+  "pipeline": {
+    "run": "Fetch & Analyze News",
+    "running": "Running...",
+    "statusFetching": "Fetching news, prices, and aligning records",
+    "statusSubmitted": "Batch analysis submitted, polling progress now",
+    "statusRunning": "LLM batch analysis is running",
+    "statusCompleted": "Batch analysis completed and panels refreshed",
+    "statusFailed": "Task failed. Please try again.",
+    "noPending": "No pending articles. Panels were refreshed.",
+    "processedCount": "Processed {{processed}} / {{total}}",
+    "relevantCount": "Relevant {{count}}",
+    "errorCount": "Errors {{count}}",
+    "queueProcessing": "Processing {{count}}",
+    "queueSucceeded": "Succeeded {{count}}",
+    "queueErrored": "Errored {{count}}",
+    "stage": {
+      "idle": "Idle",
+      "fetching": "Fetching",
+      "submitting": "Submitted",
+      "batch_running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    }
+  },
   "chart": {
     "open": "O",
     "high": "H",

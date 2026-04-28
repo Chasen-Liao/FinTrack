@@ -26,6 +26,7 @@ interface NewsItem {
 interface Props {
   symbol: string;
   hoveredDate: string | null;
+  refreshToken?: number;
   onFindSimilar?: (newsId: string) => void;
   highlightedNewsId?: string | null;
   isLocked?: boolean;
@@ -49,7 +50,7 @@ function pct(v: number | null) {
   return <span style={{ color, fontWeight: 600 }}>{pctVal > 0 ? '+' : ''}{pctVal.toFixed(2)}%</span>;
 }
 
-export default function NewsPanel({ symbol, hoveredDate, onFindSimilar, highlightedNewsId, isLocked, onUnlock, highlightedCategoryIds }: Props) {
+export default function NewsPanel({ symbol, hoveredDate, refreshToken = 0, onFindSimilar, highlightedNewsId, isLocked, onUnlock, highlightedCategoryIds }: Props) {
   const { t } = useTranslation();
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -93,7 +94,7 @@ export default function NewsPanel({ symbol, hoveredDate, onFindSimilar, highligh
     cacheRef.current.clear();
     setNews([]);
     setDisplayDate(null);
-  }, [symbol]);
+  }, [symbol, refreshToken]);
 
   // Auto-scroll to highlighted article
   useEffect(() => {
