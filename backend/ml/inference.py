@@ -16,7 +16,7 @@ import pandas as pd
 import joblib
 
 from backend.database import get_conn
-from backend.ml.features import build_features, FEATURE_COLS
+from backend.ml.features import build_features, FEATURE_COLS, resolve_feature_cols
 
 MODELS_DIR = Path(__file__).parent / "models"
 
@@ -283,8 +283,10 @@ def generate_forecast(symbol: str, window_days: int = 7) -> dict:
         model = joblib.load(model_path)
         meta = json.loads(meta_path.read_text())
 
+        # Use the correct feature columns for this model's expected input
+        model_cols = resolve_feature_cols(model)
         last_row = df.iloc[-1]
-        X = last_row[FEATURE_COLS].values.reshape(1, -1).astype(np.float64)
+        X = last_row[model_cols].values.reshape(1, -1).astype(np.float64)
         np.nan_to_num(X, copy=False)
 
         proba = model.predict_proba(X)[0]
@@ -292,12 +294,12 @@ def generate_forecast(symbol: str, window_days: int = 7) -> dict:
         confidence = float(proba[pred_class])
 
         # Instance-level feature contribution (deviation from training mean)
-        feature_means = df[FEATURE_COLS].mean()
-        feature_stds = df[FEATURE_COLS].std().clip(lower=1e-10)
+        feature_means = df[model_cols].mean()
+        feature_stds = df[model_cols].std().clip(lower=1e-10)
         importances = model.feature_importances_
 
         contributions = []
-        for i, col in enumerate(FEATURE_COLS):
+        for i, col in enumerate(model_cols):
             val = float(last_row[col]) if pd.notna(last_row[col]) else 0.0
             z = (val - feature_means[col]) / feature_stds[col]
             contrib = abs(z) * importances[i]
@@ -365,36 +367,36 @@ def _build_conclusion(
     prediction: dict,
     similar_stats: dict,
 ) -> str:
-    """Build an English-language conclusion from statistical signals."""
+    """Build a Chinese-language conclusion from statistical signals."""
     parts = []
 
-    window_label = f"past {window_days} days" if window_days <= 7 else f"past {window_days} days (~1 month)"
+    window_label = f"近{window_days}天" if window_days <= 7 else f"近{window_days}天（约1个月）"
     n = news_summary["total"]
     ratio = news_summary["sentiment_ratio"]
 
     # News summary
     if n == 0:
-        parts.append(f"{symbol} has no related news in the {window_label}.")
+        parts.append(f"{symbol}在{window_label}内没有相关新闻。")
     else:
-        tone = "leaning positive" if ratio > 0.1 else "leaning negative" if ratio < -0.1 else "neutral"
+        tone = "偏正面" if ratio > 0.1 else "偏负面" if ratio < -0.1 else "中性"
         parts.append(
-            f"{symbol} had {n} related news in the {window_label}, "
-            f"{news_summary['positive']} positive / {news_summary['negative']} negative, "
-            f"overall sentiment {tone} ({ratio:+.2f})."
+            f"{symbol}在{window_label}内有{n}篇相关新闻，"
+            f"正面{news_summary['positive']}篇/负面{news_summary['negative']}篇，"
+            f"整体情绪{tone}（{ratio:+.2f}）。"
         )
 
     # Model prediction
     horizon_labels = [
-        ("Short-term (T+1)", "t1"), ("Mid-term (T+3)", "t3"), ("Mid-term (T+5)", "t5"),
+        ("短期(T+1)", "t1"), ("中期(T+3)", "t3"), ("中期(T+5)", "t5"),
     ]
     for h_label, h_key in horizon_labels:
         p = prediction.get(h_key)
         if not p:
             continue
-        d = "bullish" if p["direction"] == "up" else "bearish"
+        d = "看涨" if p["direction"] == "up" else "看跌"
         conf = p["confidence"] * 100
         model_tag = f"[{p.get('model_type', 'XGBoost')}]" if p.get("model_type") else ""
-        parts.append(f"{model_tag} Model {h_label} prediction: {d}, confidence {conf:.0f}%.")
+        parts.append(f"{model_tag}模型{h_label}预测：{d}，置信度{conf:.0f}%。")
 
     # Similar periods
     if similar_stats["count"] > 0:
@@ -402,9 +404,9 @@ def _build_conclusion(
         ar5 = similar_stats.get("avg_ret_5d")
         if ur5 is not None and ar5 is not None:
             parts.append(
-                f"Among {similar_stats['count']} historically similar periods, "
-                f"{ur5*100:.0f}% rose in the following 5 days, "
-                f"with an average return of {ar5:+.1f}%."
+                f"在{similar_stats['count']}个历史相似时期中，"
+                f"{ur5*100:.0f}%在后续5天上涨，"
+                f"平均收益为{ar5:+.1f}%。"
             )
 
     # Overall judgment
@@ -428,10 +430,12 @@ def _build_conclusion(
     if signals:
         avg_signal = sum(signals) / len(signals)
         if avg_signal > 0.3:
-            parts.append("Multi-signal assessment: leaning bullish.")
+            parts.append("多信号综合评估：偏多。")
         elif avg_signal < -0.3:
-            parts.append("Multi-signal assessment: leaning bearish.")
+            parts.append("多信号综合评估：偏空。")
         else:
-            parts.append("Multi-signal assessment: direction unclear, recommend holding.")
+            parts.append("多信号综合评估：方向不明，建议观望。")
 
-    return " ".join(parts)
+    # Strip trailing periods from each part, then re-join
+    parts = [p.rstrip("。") for p in parts if p.strip()]
+    return "。".join(parts) + "。"

@@ -107,9 +107,11 @@ def _build_batch_prompt(symbol: str, articles: List[Dict[str, Any]]) -> str:
 
 {chr(10).join(lines)}
 
-Format: [{{"i":0,"r":"y"|"n","s":"+"|"-"|"0","e":"summary","u":"up reason","d":"down reason"}}]
+Format: [{{"i":0,"r":"y"|"n","s":"+"|"-"|"0","score":0,"c":"other","e":"summary","u":"up reason","d":"down reason"}}]
 r: "y" = article specifically discusses {symbol}, "n" = irrelevant/brief mention
 s: "+" positive, "-" negative, "0" neutral
+score: numerical sentiment -2 (very negative) -1 (mildly negative) 0 (neutral) +1 (mildly positive) +2 (very positive). Use 0 if irrelevant.
+c: event category — "earnings" (financial results/guidance), "product" (product launch/update), "regulatory" (lawsuit/regulation/policy), "macro" (macroeconomic/interest rates/market), "analyst" (analyst rating/price target), "management" (leadership/strategy/restructuring), "industry" (industry trend/competition), "other" (default)
 e: 10-word summary of what happened (empty if irrelevant)
 u: why this could push {symbol} stock UP, e.g. "strong earnings beat expectations" (empty if none or irrelevant)
 d: why this could push {symbol} stock DOWN, e.g. "antitrust lawsuit threatens App Store revenue" (empty if none or irrelevant)
@@ -193,17 +195,36 @@ def process_batch_group(
             raw_s = item.get("s", "0")
             sentiment = {"+": "positive", "-": "negative"}.get(raw_s, "neutral")
 
+            # Parse new fields with backward-compatible defaults
+            raw_score = item.get("score")
+            if raw_score is not None:
+                try:
+                    sentiment_score = max(-2.0, min(2.0, float(raw_score)))
+                except (ValueError, TypeError):
+                    sentiment_score = None
+            else:
+                sentiment_score = None  # fallback: computed from sentiment in features.py
+
+            event_category = str(item.get("c", "other")) if item.get("c") else "other"
+            VALID_CATEGORIES = {"earnings", "product", "regulatory", "macro",
+                                "analyst", "management", "industry", "other"}
+            if event_category not in VALID_CATEGORIES:
+                event_category = "other"
+
             conn.execute(
                 """INSERT OR REPLACE INTO layer1_results
                    (news_id, symbol, relevance, key_discussion, sentiment,
+                    sentiment_score, event_category,
                     reason_growth, reason_decrease)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     art["id"],
                     symbol,
                     relevance,
                     item.get("e", ""),
                     sentiment,
+                    sentiment_score,
+                    event_category,
                     item.get("u", ""),
                     item.get("d", ""),
                 ),
@@ -375,17 +396,34 @@ def collect_batch_results(batch_id: str) -> Dict[str, int]:
                 raw_s = item.get("s", "0")
                 sentiment = {"+": "positive", "-": "negative"}.get(raw_s, "neutral")
 
+                raw_score = item.get("score")
+                if raw_score is not None:
+                    try:
+                        sentiment_score = max(-2.0, min(2.0, float(raw_score)))
+                    except (ValueError, TypeError):
+                        sentiment_score = None
+                else:
+                    sentiment_score = None
+
+                event_category = str(item.get("c", "other")) if item.get("c") else "other"
+                if event_category not in {"earnings", "product", "regulatory", "macro",
+                                           "analyst", "management", "industry", "other"}:
+                    event_category = "other"
+
                 conn.execute(
                     """INSERT OR REPLACE INTO layer1_results
                        (news_id, symbol, relevance, key_discussion, sentiment,
+                        sentiment_score, event_category,
                         reason_growth, reason_decrease)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         article_ids[idx],
                         symbol,
                         relevance,
                         item.get("e", ""),
                         sentiment,
+                        sentiment_score,
+                        event_category,
                         item.get("u", ""),
                         item.get("d", ""),
                     ),

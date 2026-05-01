@@ -359,7 +359,7 @@ function ForecastSection({
   const stats = forecast.similar_stats;
 
   const conclusionBullets = forecast.conclusion
-    ? forecast.conclusion.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 0)
+    ? forecast.conclusion.split(/(?<=[.!?。])\s*/).filter((s) => s.trim().length > 0)
     : [];
 
   return (

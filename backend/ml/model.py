@@ -8,7 +8,7 @@ import numpy as np
 import joblib
 from xgboost import XGBClassifier
 
-from backend.ml.features import build_features, build_features_multi, FEATURE_COLS
+from backend.ml.features import build_features, build_features_multi, FEATURE_COLS, resolve_feature_cols
 
 MODELS_DIR = Path(__file__).parent / "models"
 MODELS_DIR.mkdir(exist_ok=True)
@@ -177,9 +177,10 @@ def predict(symbol: str, horizon: str = "t1") -> dict:
     if df.empty:
         return {"error": f"No feature data for {symbol}"}
 
-    # Use the last row (most recent trading day with complete features)
+    # Use the correct feature columns for this model's expected input
+    model_cols = resolve_feature_cols(model)
     last_row = df.iloc[-1]
-    X = last_row[FEATURE_COLS].values.reshape(1, -1).astype(np.float64)
+    X = last_row[model_cols].values.reshape(1, -1).astype(np.float64)
 
     proba = model.predict_proba(X)[0]
     pred_class = int(np.argmax(proba))
@@ -187,9 +188,9 @@ def predict(symbol: str, horizon: str = "t1") -> dict:
 
     # Top feature contributions for this prediction
     importances = model.feature_importances_
-    feature_values = {col: float(last_row[col]) for col in FEATURE_COLS}
+    feature_values = {col: float(last_row[col]) for col in model_cols}
     top = sorted(
-        zip(FEATURE_COLS, importances.tolist()),
+        zip(model_cols, importances.tolist()),
         key=lambda x: x[1],
         reverse=True,
     )[:5]

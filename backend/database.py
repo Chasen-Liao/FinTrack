@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS layer1_results (
     key_discussion      TEXT,
     chinese_summary     TEXT,
     sentiment           TEXT,
+    sentiment_score     REAL,
+    event_category      TEXT,
     discussion          TEXT,
     reason_growth       TEXT,
     reason_decrease     TEXT,
@@ -116,10 +118,24 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
+def run_migrations():
+    """Add new columns to existing tables (safe to run repeatedly)."""
+    conn = get_conn()
+    cursor = conn.execute("PRAGMA table_info(layer1_results)")
+    existing = {row[1] for row in cursor.fetchall()}
+    if "sentiment_score" not in existing:
+        conn.execute("ALTER TABLE layer1_results ADD COLUMN sentiment_score REAL")
+    if "event_category" not in existing:
+        conn.execute("ALTER TABLE layer1_results ADD COLUMN event_category TEXT")
+    conn.commit()
+    conn.close()
+
+
 def init_db():
     conn = get_conn()
     conn.executescript(SCHEMA)
     conn.close()
+    run_migrations()
     print(f"Database initialized at {settings.database_path}")
 
 

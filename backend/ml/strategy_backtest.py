@@ -25,13 +25,26 @@ DEFAULT_FEE_RATE = 0.001
 MIN_TRADE_COUNT = 8
 
 FEATURE_COLS = [
+    # News
     "n_articles", "n_relevant", "n_positive", "n_negative", "n_neutral",
-    "sentiment_score", "relevance_ratio", "positive_ratio", "negative_ratio", "has_news",
+    "sentiment_score", "sentiment_strength",
+    "relevance_ratio", "positive_ratio", "negative_ratio", "has_news",
+    # Rolling news
     "sentiment_score_3d", "sentiment_score_5d", "sentiment_score_10d",
+    "sentiment_strength_3d", "sentiment_strength_5d", "sentiment_strength_10d",
     "positive_ratio_3d", "positive_ratio_5d", "positive_ratio_10d",
     "negative_ratio_3d", "negative_ratio_5d", "negative_ratio_10d",
     "news_count_3d", "news_count_5d", "news_count_10d",
-    "sentiment_momentum_3d",
+    "sentiment_momentum_3d", "strength_momentum_3d",
+    # Event category features (A2)
+    "earnings_count", "product_count", "regulatory_count",
+    "macro_count", "analyst_count", "management_count",
+    "industry_count", "other_count",
+    "earnings_sentiment", "product_sentiment",
+    # Sector linkage features (A4)
+    "sector_articles", "sector_sentiment",
+    "sector_positive_count", "sector_negative_count",
+    # Price / tech
     "ret_1d", "ret_3d", "ret_5d", "ret_10d",
     "volatility_5d", "volatility_10d",
     "volume_ratio_5d", "gap", "ma5_vs_ma20", "rsi_14", "day_of_week",
@@ -282,18 +295,37 @@ def _get_conn() -> sqlite3.Connection:
     return conn
 
 
+def _sentiment_fallback_expr(table: str = "l1") -> str:
+    """SQL expression: use sentiment_score if available, else fall back to ±1 from sentiment."""
+    return f"""COALESCE({table}.sentiment_score,
+                CASE {table}.sentiment
+                    WHEN 'positive' THEN 1.0
+                    WHEN 'negative' THEN -1.0
+                    ELSE 0.0
+                END)"""
+
+
+BASE_NEWS_COLS = [
+    "n_articles", "n_relevant", "n_positive", "n_negative", "n_neutral",
+    "sentiment_score", "relevance_ratio", "positive_ratio", "negative_ratio", "has_news",
+]
+
+
 def _load_news_features(symbol: str) -> Any:
     import pandas as pd
 
+    score_expr = _sentiment_fallback_expr("l1")
     conn = _get_conn()
     rows = conn.execute(
-        """
+        f"""
         SELECT na.trade_date,
                COUNT(*) AS n_articles,
                SUM(CASE WHEN l1.relevance IN ('high','medium') THEN 1 ELSE 0 END) AS n_relevant,
                SUM(CASE WHEN l1.sentiment = 'positive' THEN 1 ELSE 0 END) AS n_positive,
                SUM(CASE WHEN l1.sentiment = 'negative' THEN 1 ELSE 0 END) AS n_negative,
-               SUM(CASE WHEN l1.sentiment = 'neutral' THEN 1 ELSE 0 END) AS n_neutral
+               SUM(CASE WHEN l1.sentiment = 'neutral' THEN 1 ELSE 0 END) AS n_neutral,
+               AVG({score_expr}) AS sentiment_score,
+               AVG(ABS({score_expr})) AS sentiment_strength
         FROM news_aligned na
         JOIN layer1_results l1 ON na.news_id = l1.news_id AND na.symbol = l1.symbol
         WHERE na.symbol = ?
@@ -310,7 +342,6 @@ def _load_news_features(symbol: str) -> Any:
     df = pd.DataFrame([dict(r) for r in rows])
     df["trade_date"] = pd.to_datetime(df["trade_date"])
     total = df["n_articles"].clip(lower=1)
-    df["sentiment_score"] = (df["n_positive"] - df["n_negative"]) / total
     df["relevance_ratio"] = df["n_relevant"] / total
     df["positive_ratio"] = df["n_positive"] / total
     df["negative_ratio"] = df["n_negative"] / total
@@ -343,26 +374,52 @@ def build_strategy_features(symbol: str) -> Any:
         return pd.DataFrame()
 
     news = _load_news_features(symbol)
+
+    # Load event category and sector features (same logic as features.py)
+    event_cat = None
+    sector = None
+    try:
+        from backend.ml.features import _load_event_category_features, _load_sector_features
+        event_cat = _load_event_category_features(symbol)
+        sector = _load_sector_features(symbol)
+    except ImportError:
+        pass
+
     df = ohlc.rename(columns={"date": "trade_date"})
     if not news.empty:
         df = df.merge(news, on="trade_date", how="left")
     else:
-        for col in ["n_articles", "n_relevant", "n_positive", "n_negative",
-                    "n_neutral", "sentiment_score", "relevance_ratio",
-                    "positive_ratio", "negative_ratio", "has_news"]:
+        for col in BASE_NEWS_COLS:
             df[col] = 0
 
-    news_cols = ["n_articles", "n_relevant", "n_positive", "n_negative",
-                 "n_neutral", "sentiment_score", "relevance_ratio",
-                 "positive_ratio", "negative_ratio", "has_news"]
+    # Merge event category features
+    if event_cat is not None and not event_cat.empty:
+        df = df.merge(event_cat, on="trade_date", how="left")
+
+    # Merge sector features
+    if sector is not None and not sector.empty:
+        df = df.merge(sector, on="trade_date", how="left")
+
+    news_cols = BASE_NEWS_COLS + ["sentiment_strength"]
     df[news_cols] = df[news_cols].fillna(0)
+
+    # Fill event category + sector columns
+    for col in ["earnings_count", "product_count", "regulatory_count",
+                "macro_count", "analyst_count", "management_count",
+                "industry_count", "other_count", "earnings_sentiment",
+                "product_sentiment", "sector_articles", "sector_sentiment",
+                "sector_positive_count", "sector_negative_count"]:
+        if col in df.columns:
+            df[col] = df[col].fillna(0)
 
     for w in [3, 5, 10]:
         df[f"sentiment_score_{w}d"] = df["sentiment_score"].rolling(w, min_periods=1).mean()
+        df[f"sentiment_strength_{w}d"] = df["sentiment_strength"].rolling(w, min_periods=1).mean()
         df[f"positive_ratio_{w}d"] = df["positive_ratio"].rolling(w, min_periods=1).mean()
         df[f"negative_ratio_{w}d"] = df["negative_ratio"].rolling(w, min_periods=1).mean()
         df[f"news_count_{w}d"] = df["n_articles"].rolling(w, min_periods=1).sum()
     df["sentiment_momentum_3d"] = df["sentiment_score_3d"] - df["sentiment_score_10d"]
+    df["strength_momentum_3d"] = df["sentiment_strength_3d"] - df["sentiment_strength_10d"]
 
     close = df["close"]
     df["ret_1d"] = close.pct_change(1).shift(1)
