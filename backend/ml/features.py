@@ -336,18 +336,43 @@ def build_features(symbol: str, include_market_benchmark: bool = False) -> pd.Da
         benchmark = _load_market_benchmark()
         df = _add_market_benchmark_features(df, benchmark)
 
-    # --- Targets: next-N-day direction ---
+    # --- Targets: future-return labels shared by train/search/experiments ---
+    df = add_future_return_targets(df)
+
+    # Drop rows without enough history
+    df = df.dropna(subset=["ret_10d", "rsi_14"]).reset_index(drop=True)
+
+    return df
+
+
+def add_future_return_targets(df: pd.DataFrame) -> pd.DataFrame:
+    """Add future-return columns and lower-noise classification targets.
+
+    All shift(-N) calls look forward to compute the return realized N days later.
+    Caller is responsible for dropping the last N rows before use to avoid
+    look-ahead leakage in training.
+    """
+    close = df["close"]
+
     df["future_return_t1"] = close.shift(-1) / close - 1
     df["future_return_t2"] = close.shift(-2) / close - 1
     df["future_return_t3"] = close.shift(-3) / close - 1
     df["future_return_t5"] = close.shift(-5) / close - 1
-    df["target_t1"] = (close.shift(-1) > close).astype(int)
-    df["target_t2"] = (close.shift(-2) > close).astype(int)
-    df["target_t3"] = (close.shift(-3) > close).astype(int)
-    df["target_t5"] = (close.shift(-5) > close).astype(int)
 
-    # Drop rows without enough history
-    df = df.dropna(subset=["ret_10d", "rsi_14"]).reset_index(drop=True)
+    df["target_t1"] = (df["future_return_t1"] > 0).astype(int)
+    df["target_t2"] = (df["future_return_t2"] > 0).astype(int)
+    df["target_t3"] = (df["future_return_t3"] > 0).astype(int)
+    df["target_t5"] = (df["future_return_t5"] > 0).astype(int)
+
+    df["target_big1_t5"] = (df["future_return_t5"].abs() > 0.01).astype(int)
+    df["target_big2_t5"] = (df["future_return_t5"].abs() > 0.02).astype(int)
+    df["target_up_big_t5"] = (df["future_return_t5"] > 0.03).astype(int)
+    df["target_down_big_t5"] = (df["future_return_t5"] < -0.03).astype(int)
+
+    # Also expose t1 big-move labels for parity with t5
+    df["target_big1_t1"] = (df["future_return_t1"].abs() > 0.01).astype(int)
+    df["target_big2_t1"] = (df["future_return_t1"].abs() > 0.02).astype(int)
+    df["target_up_big_t1"] = (df["future_return_t1"] > 0.01).astype(int)
 
     return df
 
