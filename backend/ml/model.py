@@ -314,6 +314,85 @@ def search_xgboost_params(
     return result
 
 
+def search_xgboost_params_unified(
+    horizon: str = "t5",
+    symbols: list[str] | None = None,
+    n_folds: int = 5,
+    min_train: int = 200,
+    param_grid: dict[str, list] | None = None,
+    metric: str = "roc_auc",
+    include_market_benchmark: bool = False,
+    neutral_band: float | None = None,
+) -> dict:
+    """Search XGBoost params on combined multi-ticker data with expanding-window CV."""
+    target_col = f"target_{horizon}"
+    df = build_features_multi(symbols, include_market_benchmark=include_market_benchmark)
+    if df.empty or len(df) < min_train + 20:
+        return {"error": f"Not enough combined data for unified search ({len(df)} rows)"}
+
+    df = df.sort_values(["trade_date", "symbol"]).reset_index(drop=True)
+    df = df.dropna(subset=[target_col]).reset_index(drop=True)
+    df = filter_neutral_samples(df, horizon, neutral_band)
+    if df.empty or len(df) < min_train + 20:
+        return {"error": f"Not enough combined rows after neutral filtering ({len(df)} rows)"}
+
+    feature_cols = FEATURE_COLS_WITH_MARKET if include_market_benchmark else FEATURE_COLS
+    X = df[feature_cols].values
+    y = df[target_col].values
+    dates = df["trade_date"].dt.strftime("%Y-%m-%d").tolist()
+
+    candidates = []
+    for params in _make_param_grid(param_grid):
+        cv_result = _expanding_window_cv(
+            X=X,
+            y=y,
+            dates=dates,
+            n_folds=n_folds,
+            min_train=min_train,
+            model_params=params,
+        )
+        if "error" in cv_result:
+            continue
+        candidates.append(
+            {
+                "params": params,
+                "param_count": len(params),
+                "accuracy": round(cv_result["accuracy"], 4),
+                "baseline": round(cv_result["baseline"], 4),
+                "accuracy_lift": round(cv_result["accuracy_lift"], 4),
+                "precision": round(cv_result["precision"], 4),
+                "recall": round(cv_result["recall"], 4),
+                "f1": round(cv_result["f1"], 4),
+                "roc_auc": round(cv_result["roc_auc"], 4) if cv_result["roc_auc"] is not None else None,
+                "n_folds": cv_result["n_folds"],
+                "total_predictions": cv_result["total_predictions"],
+            }
+        )
+
+    if not candidates:
+        return {"error": f"No valid unified search results for {horizon}"}
+
+    best = select_best_search_result(candidates, metric=metric)
+    return {
+        "symbol": "UNIFIED",
+        "horizon": horizon,
+        "metric": metric,
+        "include_market_benchmark": include_market_benchmark,
+        "neutral_band": neutral_band,
+        "candidate_count": len(candidates),
+        "best_params": best["params"],
+        "best_metrics": {
+            "accuracy": best["accuracy"],
+            "baseline": best["baseline"],
+            "accuracy_lift": best["accuracy_lift"],
+            "precision": best["precision"],
+            "recall": best["recall"],
+            "f1": best["f1"],
+            "roc_auc": best["roc_auc"],
+        },
+    }
+
+
 def train(symbol: str, horizon: str = "t1", model_params: dict | None = None,
           include_market_benchmark: bool = False,
           neutral_band: float | None = None) -> dict:

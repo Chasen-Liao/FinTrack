@@ -275,8 +275,10 @@ def build_features(symbol: str, include_market_benchmark: bool = False) -> pd.Da
                    "sector_positive_count", "sector_negative_count"]
 
     # Fill missing news days
-    news_cols = BASE_NEWS_COLS + ["sentiment_strength"]
-    df[news_cols] = df[news_cols].fillna(0)
+    news_cols_with_strength = BASE_NEWS_COLS + ["sentiment_strength"]
+    for col in news_cols_with_strength:
+        if col in df.columns:
+            df[col] = df[col].fillna(0)
 
     # Ensure event category columns always exist (even when no data)
     for col in EVENT_CAT_COLS:
@@ -295,7 +297,10 @@ def build_features(symbol: str, include_market_benchmark: bool = False) -> pd.Da
     # --- Rolling news features (use current + past, no shift needed since news is pre-market/same day) ---
     for w in [3, 5, 10]:
         df[f"sentiment_score_{w}d"] = df["sentiment_score"].rolling(w, min_periods=1).mean()
-        df[f"sentiment_strength_{w}d"] = df["sentiment_strength"].rolling(w, min_periods=1).mean()
+        if "sentiment_strength" in df.columns:
+            df[f"sentiment_strength_{w}d"] = df["sentiment_strength"].rolling(w, min_periods=1).mean()
+        else:
+            df[f"sentiment_strength_{w}d"] = 0.0
         df[f"positive_ratio_{w}d"] = df["positive_ratio"].rolling(w, min_periods=1).mean()
         df[f"negative_ratio_{w}d"] = df["negative_ratio"].rolling(w, min_periods=1).mean()
         df[f"news_count_{w}d"] = df["n_articles"].rolling(w, min_periods=1).sum()

@@ -5,10 +5,11 @@ import time
 import json
 
 from backend.database import get_conn
-from backend.ml.model import train, search_xgboost_params
+from backend.ml.model import train, search_xgboost_params, search_xgboost_params_unified
 from backend.ml.backtest import run_backtest
 
 HORIZONS = ["t1", "t5"]
+SEARCH_METRICS = ["accuracy_lift", "roc_auc", "f1"]
 
 # Best LSTM configs per ticker (from experiments)
 LSTM_CONFIGS = {
@@ -38,6 +39,9 @@ def main():
     parser.add_argument("--apply-best-params", action="store_true", help="Train final model with searched best params")
     parser.add_argument("--market-benchmark", action="store_true", help="Add equal-weight market benchmark features")
     parser.add_argument("--neutral-band", type=float, help="Drop samples whose absolute future return is below this threshold")
+    parser.add_argument("--metric", choices=SEARCH_METRICS, default="accuracy_lift",
+                        help="Primary metric used to rank expanding-window search candidates")
+    parser.add_argument("--unified", action="store_true", help="Use the combined multi-ticker training/search path")
     args = parser.parse_args()
 
     symbols = [args.symbol.upper()] if args.symbol else get_symbols()
@@ -47,12 +51,36 @@ def main():
     t0 = time.time()
     for sym in symbols:
         for h in horizons:
+            if args.search_params and args.unified:
+                search = search_xgboost_params_unified(
+                    horizon=h,
+                    symbols=symbols,
+                    n_folds=args.folds,
+                    min_train=args.min_train,
+                    metric=args.metric,
+                    include_market_benchmark=args.market_benchmark,
+                    neutral_band=args.neutral_band,
+                )
+                if "error" in search:
+                    print(f"  UNIFIED/{h} search: {search['error']}")
+                    continue
+                best = search["best_metrics"]
+                print(
+                    f"  UNIFIED/{h} search ({args.metric}): "
+                    f"lift={best['accuracy_lift']:.2%} "
+                    f"auc={best['roc_auc']:.4f} "
+                    f"acc={best['accuracy']:.1%} "
+                    f"f1={best['f1']:.1%}"
+                )
+                continue
+
             if args.search_params:
                 search = search_xgboost_params(
                     sym,
                     h,
                     n_folds=args.folds,
                     min_train=args.min_train,
+                    metric=args.metric,
                     include_market_benchmark=args.market_benchmark,
                     neutral_band=args.neutral_band,
                 )
@@ -62,8 +90,11 @@ def main():
 
                 best = search["best_metrics"]
                 print(
-                    f"  {sym}/{h} search: best lift={best['accuracy_lift']:.2%} "
-                    f"acc={best['accuracy']:.1%} f1={best['f1']:.1%} "
+                    f"  {sym}/{h} search ({args.metric}): "
+                    f"lift={best['accuracy_lift']:.2%} "
+                    f"auc={best['roc_auc']:.4f} "
+                    f"acc={best['accuracy']:.1%} "
+                    f"f1={best['f1']:.1%} "
                     f"params={json.dumps(search['best_params'], ensure_ascii=False)}"
                 )
 
