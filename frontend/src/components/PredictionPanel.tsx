@@ -526,9 +526,6 @@ function PredictionCard({ label, pred, t }: { label: string; pred: HorizonPredic
   const isUp = pred.direction === 'up';
   const hasAccuracy = pred.model_accuracy != null && pred.baseline_accuracy != null;
   const lift = hasAccuracy ? (pred.model_accuracy! - pred.baseline_accuracy!) : 0;
-  const maxContrib = pred.top_drivers.length > 0
-    ? Math.max(...pred.top_drivers.map((d) => d.contribution), 0.01)
-    : 0.01;
 
   return (
     <div className={`fc-pred-card ${isUp ? 'up' : 'down'}`}>
@@ -549,22 +546,38 @@ function PredictionCard({ label, pred, t }: { label: string; pred: HorizonPredic
         </div>
       )}
       {pred.top_drivers.length > 0 && (
-        <div className="fc-drivers">
-          {pred.top_drivers.slice(0, 4).map((d) => (
-            <div key={d.name} className="fc-driver-row">
-              <span className="fc-driver-name">{d.name}</span>
-              <div className="fc-driver-bar-track">
-                <div
-                  className={`fc-driver-bar-fill ${d.z_score > 0 ? 'up' : 'down'}`}
-                  style={{ width: `${(d.contribution / maxContrib) * 100}%` }}
-                />
-              </div>
-              <span className="fc-driver-val">
-                {d.value.toFixed(2)} ({d.z_score > 0 ? '+' : ''}{d.z_score.toFixed(1)}\u03C3)
-              </span>
-            </div>
-          ))}
-        </div>
+        <div className="fc-drivers" ref={(el) => {
+          if (!el || pred.top_drivers.length === 0) return;
+          import('d3').then((d3) => {
+            el.innerHTML = '';
+            const data = pred.top_drivers.slice(0, 4).map(d => ({
+              name: d.name,
+              importance: d.contribution,
+            }));
+            const maxVal = Math.max(...data.map(d => d.importance), 0.01);
+            const containerWidth = el.clientWidth || 280;
+            const barHeight = 20;
+            const svgHeight = data.length * barHeight + 8;
+            const svg = d3.select(el).append('svg')
+              .attr('width', containerWidth)
+              .attr('height', svgHeight);
+            const x = d3.scaleLinear().domain([0, maxVal]).range([0, containerWidth - 80]);
+            const colors = ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe'];
+            data.forEach((d, i) => {
+              const g = svg.append('g').attr('transform', `translate(0,${i * barHeight + 4})`);
+              g.append('rect')
+                .attr('x', 0).attr('y', 0)
+                .attr('width', x(d.importance)).attr('height', barHeight - 4)
+                .attr('fill', colors[i] || colors[colors.length - 1])
+                .attr('rx', 2);
+              g.append('text')
+                .attr('x', Math.min(x(d.importance) + 4, containerWidth - 90))
+                .attr('y', barHeight - 6).attr('fill', '#1e3a5f')
+                .attr('font-size', '10px')
+                .text(d.name.length > 18 ? d.name.slice(0, 16) + '…' : d.name);
+            });
+          });
+        }} />
       )}
     </div>
   );

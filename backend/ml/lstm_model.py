@@ -337,24 +337,48 @@ def run_lstm_backtest(symbol: str, target_col: str = "target_t3",
 # ---- Production: train full data, save model ----
 
 def train_and_save_lstm(symbol: str, target_col: str = "target_t3",
-                        feature_cols: list = None, seq_len: int = 10,
-                        exclude_neutral: bool = False, epochs: int = 50) -> dict:
-    """Train LSTM on ALL available data and save for production inference."""
-    if exclude_neutral:
+                        seq_len: int = 10,
+                        exclude_neutral: bool = False,
+                        epochs: int = 50,
+                        symbols: list[str] | None = None) -> dict:
+    """Train LSTM on ALL available data and save for production inference.
+
+    Parameters
+    ----------
+    symbol : str
+        Target ticker to train on.
+    target_col : str
+        Target column name (e.g. "target_t3").
+    seq_len : int
+        Sliding window length.
+    exclude_neutral : bool
+        Filter out neutral news articles.
+    epochs : int
+        Training epochs.
+    symbols : list[str] | None
+        If provided, uses build_features_multi instead of single-symbol build.
+        This enables multi-ticker feature alignment.
+    """
+    if symbols is not None:
+        # Multi-ticker path: build_features_multi returns DataFrame with 'symbol' column
+        from backend.ml.features import build_features_multi
+        df = build_features_multi(symbols=symbols)
+        # Filter to target symbol
+        df = df[df["symbol"] == symbol].reset_index(drop=True)
+    elif exclude_neutral:
         df = build_features_filtered(symbol, exclude_neutral=True)
-        if feature_cols is None:
-            feature_cols = FILTERED_FEATURE_COLS
+        feature_cols = FILTERED_FEATURE_COLS
     else:
         from backend.ml.features_v2 import build_features_v2
         df = build_features_v2(symbol)
-        if feature_cols is None:
-            feature_cols = FEATURE_COLS_V2_MARKET
+        feature_cols = FEATURE_COLS_V2_MARKET
 
     if df.empty:
         return {"error": f"No data for {symbol}"}
 
     df = df.dropna(subset=[target_col]).reset_index(drop=True)
-    valid_cols = [c for c in feature_cols if c in df.columns]
+    valid_cols = [c for c in (feature_cols if exclude_neutral or symbols is None else FEATURE_COLS_V2_MARKET)
+                 if c in df.columns]
     X_raw = df[valid_cols].values.astype(np.float64)
     np.nan_to_num(X_raw, copy=False)
     y_raw = df[target_col].values.astype(int)
@@ -411,8 +435,13 @@ def train_and_save_lstm(symbol: str, target_col: str = "target_t3",
     }
     (MODELS_DIR / f"{prefix}_meta.json").write_text(json.dumps(meta, indent=2))
 
-    print(f"  Saved LSTM model: {prefix}.pt ({len(y_seq)} sequences)")
-    return meta
+    return {
+        "train_size": len(y_seq),
+        "n_features": len(valid_cols),
+        "model_path": str(MODELS_DIR / f"{prefix}.pt"),
+        "meta_path": str(MODELS_DIR / f"{prefix}_meta.json"),
+        "meta": meta,
+    }
 
 
 def predict_lstm(symbol: str) -> dict | None:

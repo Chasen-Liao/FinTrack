@@ -110,11 +110,13 @@ def calculate_max_drawdown(equity_curve: list[dict]) -> float:
     return max_drawdown
 
 
-def simulate_equity_curve(rows: list[dict], fee_rate: float = DEFAULT_FEE_RATE) -> dict:
+def simulate_equity_curve(rows: list[dict], fee_rate: float = DEFAULT_FEE_RATE,
+                         slippage: float = 0.0) -> dict:
     """Simulate daily long/cash equity from close prices and binary signals.
 
     The signal on day N becomes the position for day N to day N+1. Fees are
-    charged whenever position changes.
+    charged whenever position changes. Slippage is applied as a cost on entry
+    and a reduction on exit.
     """
     if len(rows) < 2:
         equity_curve = [
@@ -130,6 +132,7 @@ def simulate_equity_curve(rows: list[dict], fee_rate: float = DEFAULT_FEE_RATE) 
             "best_trade_return": 0.0,
             "worst_trade_return": 0.0,
             "cumulative_return": 0.0,
+            "slippage_cost": 0.0,
         }
 
     equity = 1.0
@@ -138,6 +141,7 @@ def simulate_equity_curve(rows: list[dict], fee_rate: float = DEFAULT_FEE_RATE) 
     entry_date = None
     trades = []
     equity_curve = [{"date": rows[0]["date"], "equity": equity, "position": 0}]
+    slippage_cost = 0.0
 
     for i in range(1, len(rows)):
         prev = rows[i - 1]
@@ -145,12 +149,22 @@ def simulate_equity_curve(rows: list[dict], fee_rate: float = DEFAULT_FEE_RATE) 
         desired_position = int(prev.get("signal", 0))
 
         if desired_position != prev_position:
+            # Apply fee first
             equity *= 1.0 - fee_rate
             if desired_position == 1:
+                # Enter long: apply slippage cost on entry
+                if slippage > 0:
+                    slippage_paid = equity * slippage
+                    slippage_cost += slippage_paid
+                    equity *= 1.0 - slippage
                 entry_equity = equity
                 entry_date = prev["date"]
             elif prev_position == 1 and entry_equity is not None:
+                # Exit long: apply slippage cost on exit
                 trade_return = equity / entry_equity - 1.0
+                if slippage > 0:
+                    slippage_cost += abs(trade_return) * slippage
+                    trade_return *= 1.0 - slippage
                 trades.append({
                     "entry_date": entry_date,
                     "exit_date": prev["date"],
@@ -175,6 +189,9 @@ def simulate_equity_curve(rows: list[dict], fee_rate: float = DEFAULT_FEE_RATE) 
     if prev_position == 1 and entry_equity is not None:
         equity *= 1.0 - fee_rate
         trade_return = equity / entry_equity - 1.0
+        if slippage > 0:
+            slippage_cost += abs(trade_return) * slippage
+            trade_return *= 1.0 - slippage
         trades.append({
             "entry_date": entry_date,
             "exit_date": rows[-1]["date"],
@@ -194,6 +211,7 @@ def simulate_equity_curve(rows: list[dict], fee_rate: float = DEFAULT_FEE_RATE) 
         "best_trade_return": max(trade_returns) if trade_returns else 0.0,
         "worst_trade_return": min(trade_returns) if trade_returns else 0.0,
         "cumulative_return": equity_curve[-1]["equity"] - 1.0 if equity_curve else 0.0,
+        "slippage_cost": slippage_cost,
     }
 
 
@@ -236,6 +254,7 @@ def build_strategy_result_from_predictions(
     fee_rate: float,
     df: Any,
     up_probabilities: np.ndarray,
+    slippage: float = 0.0,
 ) -> dict:
     """Build a strategy result from feature rows and up probabilities."""
     records = _iter_records(df)
@@ -254,7 +273,7 @@ def build_strategy_result_from_predictions(
             "signal": 1 if prob >= threshold else 0,
         })
 
-    simulation = simulate_equity_curve(rows, fee_rate=fee_rate)
+    simulation = simulate_equity_curve(rows, fee_rate=fee_rate, slippage=slippage)
     equity_curve = simulation["equity_curve"]
     annual_return = calculate_annual_return(equity_curve)
     max_drawdown = calculate_max_drawdown(equity_curve)
@@ -267,6 +286,7 @@ def build_strategy_result_from_predictions(
         "horizon": horizon,
         "threshold": float(threshold),
         "fee_rate": float(fee_rate),
+        "slippage": float(slippage),
         "start_date": rows[0]["date"],
         "end_date": rows[-1]["date"],
         "annual_return": _round_metric(annual_return),
@@ -278,6 +298,7 @@ def build_strategy_result_from_predictions(
         "average_trade_return": _round_metric(simulation["average_trade_return"]),
         "best_trade_return": _round_metric(simulation["best_trade_return"]),
         "worst_trade_return": _round_metric(simulation["worst_trade_return"]),
+        "slippage_cost": _round_metric(simulation.get("slippage_cost", 0.0)),
         "meets_annual_return_target": annual_return > 0.20,
         "meets_drawdown_target": max_drawdown < 0.20,
         "equity_curve": equity_curve,
@@ -550,6 +571,7 @@ def run_strategy_backtest(
     horizon: str = "t5",
     threshold: float = 0.60,
     fee_rate: float = DEFAULT_FEE_RATE,
+    slippage: float = 0.001,
 ) -> dict:
     """Run out-of-sample strategy backtest for one symbol/horizon/threshold."""
     symbol = symbol.upper()
@@ -584,6 +606,7 @@ def run_strategy_backtest(
         fee_rate=fee_rate,
         df=oos_df,
         up_probabilities=up_probabilities,
+        slippage=slippage,
     )
     result["oos_method"] = "expanding_window"
     result["prediction_source"] = prediction_source
