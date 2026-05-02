@@ -17,6 +17,7 @@ interface HorizonPrediction {
   top_drivers: Driver[];
   model_accuracy: number | null;
   baseline_accuracy: number | null;
+  roc_auc: number | null;
 }
 
 interface SimilarPeriod {
@@ -542,6 +543,9 @@ function PredictionCard({ label, pred, t }: { label: string; pred: HorizonPredic
       {hasAccuracy && (
         <div className="fc-pred-meta">
           {t('prediction.accuracy')} {(pred.model_accuracy! * 100).toFixed(1)}% / {t('prediction.baseline')} {(pred.baseline_accuracy! * 100).toFixed(1)}% / {t('prediction.lift')} {lift >= 0 ? '+' : ''}{(lift * 100).toFixed(1)}pp
+          {pred.roc_auc != null && (
+            <span> / AUC {pred.roc_auc.toFixed(3)}</span>
+          )}
         </div>
       )}
       {pred.top_drivers.length > 0 && (

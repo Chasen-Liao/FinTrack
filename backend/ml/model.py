@@ -628,4 +628,5 @@ def predict(symbol: str, horizon: str = "t1") -> dict:
         ],
         "model_accuracy": meta["accuracy"],
         "baseline_accuracy": meta["baseline"],
+        "roc_auc": meta.get("roc_auc"),
     }
