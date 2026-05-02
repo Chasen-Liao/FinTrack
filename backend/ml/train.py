@@ -2,9 +2,10 @@
 
 import argparse
 import time
+import json
 
 from backend.database import get_conn
-from backend.ml.model import train
+from backend.ml.model import train, search_xgboost_params
 from backend.ml.backtest import run_backtest
 
 HORIZONS = ["t1", "t5"]
@@ -30,15 +31,59 @@ def main():
     parser.add_argument("--symbol", type=str, help="Train only this ticker")
     parser.add_argument("--backtest", action="store_true", help="Run backtest after training")
     parser.add_argument("--lstm", action="store_true", help="Also train LSTM for configured tickers")
+    parser.add_argument("--search-params", action="store_true", help="Search XGBoost params with expanding-window CV")
+    parser.add_argument("--horizon", choices=HORIZONS, help="Search or train only one horizon")
+    parser.add_argument("--folds", type=int, default=5, help="Expanding-window fold count for search")
+    parser.add_argument("--min-train", type=int, default=200, help="Minimum training rows for expanding-window search")
+    parser.add_argument("--apply-best-params", action="store_true", help="Train final model with searched best params")
+    parser.add_argument("--market-benchmark", action="store_true", help="Add equal-weight market benchmark features")
+    parser.add_argument("--neutral-band", type=float, help="Drop samples whose absolute future return is below this threshold")
     args = parser.parse_args()
 
     symbols = [args.symbol.upper()] if args.symbol else get_symbols()
+    horizons = [args.horizon] if args.horizon else HORIZONS
     print(f"Training for {len(symbols)} ticker(s): {', '.join(symbols)}")
 
     t0 = time.time()
     for sym in symbols:
-        for h in HORIZONS:
-            result = train(sym, h)
+        for h in horizons:
+            if args.search_params:
+                search = search_xgboost_params(
+                    sym,
+                    h,
+                    n_folds=args.folds,
+                    min_train=args.min_train,
+                    include_market_benchmark=args.market_benchmark,
+                    neutral_band=args.neutral_band,
+                )
+                if "error" in search:
+                    print(f"  {sym}/{h} search: {search['error']}")
+                    continue
+
+                best = search["best_metrics"]
+                print(
+                    f"  {sym}/{h} search: best lift={best['accuracy_lift']:.2%} "
+                    f"acc={best['accuracy']:.1%} f1={best['f1']:.1%} "
+                    f"params={json.dumps(search['best_params'], ensure_ascii=False)}"
+                )
+
+                if not args.apply_best_params:
+                    continue
+
+                result = train(
+                    sym,
+                    h,
+                    model_params=search["best_params"],
+                    include_market_benchmark=args.market_benchmark,
+                    neutral_band=args.neutral_band,
+                )
+            else:
+                result = train(
+                    sym,
+                    h,
+                    include_market_benchmark=args.market_benchmark,
+                    neutral_band=args.neutral_band,
+                )
             if "error" in result:
                 print(f"  {sym}/{h}: {result['error']}")
             else:

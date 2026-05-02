@@ -176,7 +176,67 @@ def _load_ohlc(symbol: str) -> pd.DataFrame:
     return df
 
 
-def build_features(symbol: str) -> pd.DataFrame:
+def _load_market_benchmark() -> pd.DataFrame:
+    """Build an equal-weight market benchmark from all tracked OHLC rows."""
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT date, AVG(close) AS benchmark_close
+        FROM ohlc
+        GROUP BY date
+        ORDER BY date
+        """
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame([dict(r) for r in rows])
+    df["trade_date"] = pd.to_datetime(df["date"])
+    close = df["benchmark_close"]
+    df["benchmark_ret_1d"] = close.pct_change(1).shift(1)
+    df["benchmark_ret_3d"] = close.pct_change(3).shift(1)
+    df["benchmark_ret_5d"] = close.pct_change(5).shift(1)
+    df["benchmark_ret_10d"] = close.pct_change(10).shift(1)
+    df["benchmark_volatility_5d"] = close.pct_change().rolling(5).std().shift(1)
+    df["benchmark_volatility_10d"] = close.pct_change().rolling(10).std().shift(1)
+    return df[[
+        "trade_date",
+        "benchmark_ret_1d", "benchmark_ret_3d", "benchmark_ret_5d", "benchmark_ret_10d",
+        "benchmark_volatility_5d", "benchmark_volatility_10d",
+    ]]
+
+
+def _add_market_benchmark_features(df: pd.DataFrame, benchmark: pd.DataFrame) -> pd.DataFrame:
+    """Merge benchmark features and add relative-strength features."""
+    benchmark_cols = [
+        "benchmark_ret_1d", "benchmark_ret_3d", "benchmark_ret_5d", "benchmark_ret_10d",
+        "benchmark_volatility_5d", "benchmark_volatility_10d",
+    ]
+    if benchmark.empty:
+        for col in benchmark_cols:
+            df[col] = 0.0
+    else:
+        df = df.merge(benchmark, on="trade_date", how="left")
+        for col in benchmark_cols:
+            if col not in df.columns:
+                df[col] = 0.0
+            else:
+                df[col] = df[col].fillna(0.0)
+
+    for window in [1, 3, 5, 10]:
+        ret_col = f"ret_{window}d"
+        benchmark_col = f"benchmark_ret_{window}d"
+        rel_col = f"rel_ret_{window}d_vs_benchmark"
+        if ret_col in df.columns:
+            df[rel_col] = df[ret_col] - df[benchmark_col]
+        else:
+            df[rel_col] = 0.0
+    return df
+
+
+def build_features(symbol: str, include_market_benchmark: bool = False) -> pd.DataFrame:
     """Build feature matrix: one row per trading day.
 
     All features use shift(1) or past windows to prevent look-ahead leakage.
@@ -272,7 +332,15 @@ def build_features(symbol: str) -> pd.DataFrame:
 
     df["day_of_week"] = df["trade_date"].dt.dayofweek
 
+    if include_market_benchmark:
+        benchmark = _load_market_benchmark()
+        df = _add_market_benchmark_features(df, benchmark)
+
     # --- Targets: next-N-day direction ---
+    df["future_return_t1"] = close.shift(-1) / close - 1
+    df["future_return_t2"] = close.shift(-2) / close - 1
+    df["future_return_t3"] = close.shift(-3) / close - 1
+    df["future_return_t5"] = close.shift(-5) / close - 1
     df["target_t1"] = (close.shift(-1) > close).astype(int)
     df["target_t2"] = (close.shift(-2) > close).astype(int)
     df["target_t3"] = (close.shift(-3) > close).astype(int)
@@ -284,7 +352,8 @@ def build_features(symbol: str) -> pd.DataFrame:
     return df
 
 
-def build_features_multi(symbols: list[str] | None = None) -> pd.DataFrame:
+def build_features_multi(symbols: list[str] | None = None,
+                         include_market_benchmark: bool = False) -> pd.DataFrame:
     """Build combined feature matrix for multiple tickers.
 
     Adds a 'symbol' column. All price features are already returns/ratios
@@ -301,7 +370,7 @@ def build_features_multi(symbols: list[str] | None = None) -> pd.DataFrame:
 
     frames = []
     for sym in symbols:
-        df = build_features(sym)
+        df = build_features(sym, include_market_benchmark=include_market_benchmark)
         if df.empty:
             continue
         df["symbol"] = sym
@@ -338,6 +407,13 @@ FEATURE_COLS = [
     "volume_ratio_5d", "gap", "ma5_vs_ma20", "rsi_14", "day_of_week",
 ]
 
+FEATURE_COLS_WITH_MARKET = FEATURE_COLS + [
+    "benchmark_ret_1d", "benchmark_ret_3d", "benchmark_ret_5d", "benchmark_ret_10d",
+    "benchmark_volatility_5d", "benchmark_volatility_10d",
+    "rel_ret_1d_vs_benchmark", "rel_ret_3d_vs_benchmark",
+    "rel_ret_5d_vs_benchmark", "rel_ret_10d_vs_benchmark",
+]
+
 # Original 34 feature columns (before A1/A2/A4 additions) for backward compatibility
 # with models trained before the feature expansion.
 FEATURE_COLS_V1 = [
@@ -358,7 +434,8 @@ def resolve_feature_cols(model=None) -> list[str]:
     """Return the appropriate feature column list based on model expectations.
 
     If model is provided, checks its expected feature count and returns the
-    matching column list (V1 for 34-feature models, current for 53-feature).
+    matching column list (V1 for 34-feature models, current for 53-feature,
+    market-enhanced for the expanded feature set).
     If no model, returns the latest FEATURE_COLS.
     """
     if model is not None:
@@ -366,6 +443,8 @@ def resolve_feature_cols(model=None) -> list[str]:
             expected = model.n_features_in_ if hasattr(model, "n_features_in_") else 0
             if expected == len(FEATURE_COLS_V1):
                 return FEATURE_COLS_V1
+            if expected == len(FEATURE_COLS_WITH_MARKET):
+                return FEATURE_COLS_WITH_MARKET
         except Exception:
             pass
     return FEATURE_COLS

@@ -53,3 +53,8 @@ logs/
 
 # OS
 Thumbs.db
+
+.local_pydeps
+.venv_search
+.pip_tmp
+.pytest_cache
