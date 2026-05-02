@@ -1,5 +1,7 @@
 ****# 提升 ML Pipeline 的 AUC 实施计划
 
+> **Status:** ✅ 已完成（2026-05-03）
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 降低当前标签噪声，并补齐以 `roc_auc` 为核心的实验与搜索流程，验证 MU/T+5 分类器能否在样本外排序能力上显著高于随机水平。
@@ -25,13 +27,13 @@
 - 修改：`tests/ml/test_model_search.py`
   责任：验证在请求时搜索排序会优先选择更高的 `roc_auc`，并覆盖新增统一搜索辅助逻辑。
 
-### Task 1: 在共享特征构建层加入更低噪声的 T+5 标签
+### Task 1: 在共享特征构建层加入更低噪声的 T+5 标签 ✅
 
 **Files:**
 - Modify: `backend/ml/features.py`
 - Test: `tests/ml/test_feature_enhancements.py`
 
-- [ ] **Step 1: 先写失败测试**
+- [x] **Step 1: 先写失败测试**
 
 向 `tests/ml/test_feature_enhancements.py` 添加下面的测试：
 
@@ -58,7 +60,7 @@ def test_add_future_return_targets_creates_direction_and_big_move_labels():
     assert result.loc[0, "target_up_big_t5"] == 1
 ```
 
-- [ ] **Step 2: 运行测试，确认当前失败**
+- [x] **Step 2: 运行测试，确认当前失败**
 
 运行：
 
@@ -115,7 +117,7 @@ def add_future_return_targets(df: pd.DataFrame) -> pd.DataFrame:
     df = add_future_return_targets(df)
 ```
 
-- [ ] **Step 4: 再次运行测试，确认通过**
+- [x] **Step 4: 再次运行测试，确认通过**
 
 运行：
 
@@ -132,7 +134,9 @@ git add tests/ml/test_feature_enhancements.py backend/ml/features.py
 git commit -m "feat: add lower-noise t5 target labels"
 ```
 
-### Task 2: 把实验流程改成 AUC 优先，而不是准确率优先
+- [x] **Step 5: 提交**
+
+### Task 2: 把实验流程改成 AUC 优先，而不是准确率优先 ✅
 
 **Files:**
 - Modify: `backend/ml/experiment.py`
@@ -155,7 +159,7 @@ def test_auc_metric_prefers_probabilities_over_hard_labels():
 
 这个测试本身很简单，作用是把后续实验流程必须输出和依赖的指标锁定为概率排序指标。
 
-- [ ] **Step 2: 运行现状验证**
+- [x] **Step 2: 运行现状验证**
 
 运行：
 
@@ -168,7 +172,7 @@ python -m backend.ml.experiment MU
 - pytest：PASS
 - 实验命令输出的表格里仍然没有 `ROC-AUC` 列，也没有 `target_up_big_t5` 对应目标
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 在 `backend/ml/experiment.py` 中先补导入：
 
