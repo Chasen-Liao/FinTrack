@@ -63,3 +63,12 @@ def test_filter_neutral_samples_drops_small_absolute_returns():
     filtered = filter_neutral_samples(df, "t5", neutral_band=0.01)
 
     assert filtered["future_return_t5"].tolist() == [0.03, -0.02]
+
+
+def test_auc_metric_prefers_probabilities_over_hard_labels():
+    from sklearn.metrics import roc_auc_score
+
+    y_true = np.array([0, 0, 1, 1])
+    y_prob = np.array([0.10, 0.40, 0.60, 0.90])
+
+    assert roc_auc_score(y_true, y_prob) == 1.0

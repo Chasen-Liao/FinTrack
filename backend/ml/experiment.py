@@ -4,7 +4,7 @@ import numpy as np
 from xgboost import XGBClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
 from backend.ml.features_v2 import (
     build_features_v2,
@@ -26,7 +26,7 @@ def _expanding_cv(X, y, n_folds=5, min_train=200, model_cls=None, model_kwargs=N
         n_folds = max(1, (n - min_train) // 10)
         test_size = (n - min_train) // n_folds
 
-    all_true, all_pred = [], []
+    all_true, all_pred, all_prob = [], [], []
 
     for fold in range(n_folds):
         train_end = min_train + fold * test_size
@@ -49,12 +49,15 @@ def _expanding_cv(X, y, n_folds=5, min_train=200, model_cls=None, model_kwargs=N
         X_te = np.nan_to_num(X_te, nan=0.0)
 
         model.fit(X_tr, y_tr)
-        y_p = model.predict(X_te)
+        y_prob = model.predict_proba(X_te)[:, 1]
+        y_p = (y_prob >= 0.5).astype(int)
         all_true.extend(y_te.tolist())
         all_pred.extend(y_p.tolist())
+        all_prob.extend(y_prob.tolist())
 
     t = np.array(all_true)
     p = np.array(all_pred)
+    prob = np.array(all_prob)
     acc = accuracy_score(t, p)
     base = max(t.mean(), 1 - t.mean())
 
@@ -66,6 +69,7 @@ def _expanding_cv(X, y, n_folds=5, min_train=200, model_cls=None, model_kwargs=N
         "precision": round(precision_score(t, p, zero_division=0), 4),
         "recall": round(recall_score(t, p, zero_division=0), 4),
         "f1": round(f1_score(t, p, zero_division=0), 4),
+        "roc_auc": round(roc_auc_score(t, prob), 4),
     }
 
 
@@ -94,9 +98,11 @@ def run_experiment(symbol: str):
         "direction_t1":     "target_t1",
         "direction_t2":     "target_t2",
         "direction_t3":     "target_t3",
+        "direction_t5":     "target_t5",
         "big_move_1pct":    "target_big1_t1",
         "big_move_2pct":    "target_big2_t1",
         "up_big_1pct":      "target_up_big_t1",
+        "up_big_3pct_t5":   "target_up_big_t5",
     }
 
     models = {
@@ -130,22 +136,22 @@ def run_experiment(symbol: str):
                     **r,
                 })
 
-    # Print results sorted by lift
-    results.sort(key=lambda x: x["lift"], reverse=True)
+    # Print results sorted by auc then lift
+    results.sort(key=lambda x: (x["roc_auc"], x["lift"], x["f1"]), reverse=True)
 
-    print(f"\n{'Target':<18} {'Features':<12} {'Model':<8} {'Acc':>6} {'Base':>6} {'Lift':>6} {'Prec':>6} {'Rec':>6} {'F1':>6}")
+    print(f"\n{'Target':<18} {'Features':<12} {'Model':<8} {'AUC':>6} {'Acc':>6} {'Base':>6} {'Lift':>6} {'F1':>6}")
     print("-" * 82)
     for r in results:
         lift_str = f"{r['lift']:+.1f}pp"
         print(f"{r['target']:<18} {r['features']:<12} {r['model']:<8} "
-              f"{r['accuracy']*100:5.1f}% {r['baseline']*100:5.1f}% {lift_str:>6} "
-              f"{r['precision']*100:5.1f}% {r['recall']*100:5.1f}% {r['f1']*100:5.1f}%")
+              f"{r['roc_auc']:5.3f} {r['accuracy']*100:5.1f}% {r['baseline']*100:5.1f}% {lift_str:>6} "
+              f"{r['f1']*100:5.1f}%")
 
     # Top 5
-    print(f"\n  Top 5 by lift:")
+    print(f"\n  Top 5 by AUC:")
     for i, r in enumerate(results[:5]):
         print(f"  {i+1}. {r['target']} + {r['features']} + {r['model']}: "
-              f"acc={r['accuracy']*100:.1f}% lift={r['lift']:+.1f}pp f1={r['f1']*100:.1f}%")
+              f"auc={r['roc_auc']:.3f} acc={r['accuracy']*100:.1f}% lift={r['lift']:+.1f}pp f1={r['f1']*100:.1f}%")
 
     return results
 
