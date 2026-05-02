@@ -81,7 +81,15 @@ def train(symbol: str, horizon: str = "t1") -> dict:
     # Save
     model_path = MODELS_DIR / f"{symbol}_{horizon}.joblib"
     meta_path = MODELS_DIR / f"{symbol}_{horizon}_meta.json"
+
+    # 使用 XGBoost 原生格式保存，更稳定且跨版本兼容
+    booster = model.get_booster()
+    json_path = MODELS_DIR / f"{symbol}_{horizon}_xgboost.json"
+    booster.save_model(str(json_path))
+
+    # 同时保留 joblib 以保持向后兼容
     joblib.dump(model, model_path)
+
     meta_path.write_text(json.dumps(meta, indent=2))
 
     return meta
@@ -152,7 +160,15 @@ def train_unified(horizon: str = "t1", symbols: list[str] | None = None) -> dict
 
     model_path = MODELS_DIR / f"UNIFIED_{horizon}.joblib"
     meta_path = MODELS_DIR / f"UNIFIED_{horizon}_meta.json"
+
+    # 使用 XGBoost 原生格式保存，更稳定且跨版本兼容
+    booster = model.get_booster()
+    json_path = MODELS_DIR / f"UNIFIED_{horizon}_xgboost.json"
+    booster.save_model(str(json_path))
+
+    # 同时保留 joblib 以保持向后兼容
     joblib.dump(model, model_path)
+
     meta_path.write_text(json.dumps(meta, indent=2))
 
     return meta
@@ -162,15 +178,25 @@ def predict(symbol: str, horizon: str = "t1") -> dict:
     """Load model and predict direction for the latest trading day."""
     model_path = MODELS_DIR / f"{symbol}_{horizon}.joblib"
     meta_path = MODELS_DIR / f"{symbol}_{horizon}_meta.json"
+    json_path = MODELS_DIR / f"{symbol}_{horizon}_xgboost.json"
 
     # Fall back to unified model if per-ticker model missing
     if not model_path.exists():
         model_path = MODELS_DIR / f"UNIFIED_{horizon}.joblib"
         meta_path = MODELS_DIR / f"UNIFIED_{horizon}_meta.json"
-    if not model_path.exists():
+        json_path = MODELS_DIR / f"UNIFIED_{horizon}_xgboost.json"
+    if not model_path.exists() and not json_path.exists():
         return {"error": f"No model for {symbol}/{horizon}. Run training first."}
 
-    model = joblib.load(model_path)
+    # 优先使用原生 XGBoost JSON 格式（跨版本兼容）
+    from xgboost import XGBClassifier
+    if json_path.exists():
+        booster = XGBClassifier()
+        booster.load_model(str(json_path))
+        model = booster
+    else:
+        model = joblib.load(model_path)
+
     meta = json.loads(meta_path.read_text())
 
     df = build_features(symbol)

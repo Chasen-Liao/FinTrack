@@ -277,10 +277,18 @@ def generate_forecast(symbol: str, window_days: int = 7) -> dict:
     for horizon in ["t1", "t5"]:
         model_path = MODELS_DIR / f"{symbol}_{horizon}.joblib"
         meta_path = MODELS_DIR / f"{symbol}_{horizon}_meta.json"
-        if not model_path.exists():
+        json_path = MODELS_DIR / f"{symbol}_{horizon}_xgboost.json"
+        if not model_path.exists() and not json_path.exists():
             continue
 
-        model = joblib.load(model_path)
+        # 优先使用原生 XGBoost JSON 格式（跨版本兼容）
+        from xgboost import XGBClassifier
+        if json_path.exists():
+            booster = XGBClassifier()
+            booster.load_model(str(json_path))
+            model = booster
+        else:
+            model = joblib.load(model_path)
         meta = json.loads(meta_path.read_text())
 
         # Use the correct feature columns for this model's expected input
