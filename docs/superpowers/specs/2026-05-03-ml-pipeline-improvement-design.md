@@ -1,8 +1,10 @@
 # ML Pipeline 改进设计：工程验证与报告自洽
 
-> Status: Draft for review
+> Status: **Implemented** (2026-05-03)
 > Date: 2026-05-03
 > Scope: `backend/ml/`、`backend/ml/models/`、课程报告中的 ML 结果解释
+> Implementation: [`2026-05-03-ml-pipeline-improvement-implementation.md`](../plans/2026-05-03-ml-pipeline-improvement-implementation.md)
+> Review follow-up: 非默认 `target_col` 使用独立文件后缀，文本 SVD 的 fold 内拟合已接入 `experiment.py` 的 `v2_full` 实验路径。
 
 ## 1. 背景与问题判断
 
@@ -42,7 +44,7 @@
 - `neutral_band` 过滤：训练方向分类时剔除未来收益绝对值过小的样本。
 - 可选收益排序目标：保留未来收益本身，用于后续排名或分位数组合实验。
 
-主训练入口不应只接受 `horizon=t1/t5` 推导出的 `target_{horizon}`。更合理的接口是显式接受 `target_col`，使实验、训练和回测能够使用同一目标定义。
+主训练入口不应只接受 `horizon=t1/t5` 推导出的 `target_{horizon}`。更合理的接口是显式接受 `target_col`，使实验、训练和回测能够使用同一目标定义。非默认目标列需要写入带目标后缀的独立产物，避免低噪声目标实验覆盖原始方向标签模型。
 
 ### 4.2 特征层
 
@@ -50,7 +52,7 @@
 
 - `features.py` 保持主流程稳定，继续提供可复用的基础特征和未来收益标签。
 - `features_v2.py` 中的市场情绪、K 线形态和文本 SVD 特征应改成可插拔特征扩展。
-- 文本特征不能在全样本上一次性 `fit_transform` 后再做时间序列验证。walk-forward 每一折必须只用训练窗口拟合 TF-IDF 和 SVD，再转换测试窗口。
+- 文本特征不能在全样本上一次性 `fit_transform` 后再做时间序列验证。启用文本特征的 `v2_full` 实验中，walk-forward 每一折必须只用训练窗口拟合 TF-IDF 和 SVD，再转换测试窗口；不启用文本特征的主训练路径继续使用基础数值特征。
 - 市场基准特征应从“全股票平均 close”逐步替换或补充为更可解释的 `SPY`、`QQQ`、行业 ETF 或板块收益。
 
 ### 4.3 实验训练层

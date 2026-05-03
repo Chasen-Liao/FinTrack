@@ -16,6 +16,54 @@ from backend.database import get_conn
 from backend.ml.features import build_features, FEATURE_COLS
 
 
+class TextSvdFeatureTransformer:
+    """Fit TF-IDF and SVD on a training window, then transform another window."""
+
+    def __init__(self, max_features: int = 500, min_df: int = 3, n_components: int = 10):
+        self.max_features = max_features
+        self.min_df = min_df
+        self.n_components = n_components
+        self.vectorizer = None
+        self.svd = None
+        self.output_columns_: list[str] = []
+        self.fit_dates_: list[str] = []
+
+    def fit(self, rows: pd.DataFrame, y=None):
+        texts = rows["text"].fillna("").tolist()
+        self.fit_dates_ = rows["trade_date"].dt.strftime("%Y-%m-%d").tolist()
+        if not any(text.strip() for text in texts):
+            self.output_columns_ = []
+            return self
+
+        self.vectorizer = TfidfVectorizer(
+            max_features=self.max_features,
+            stop_words="english",
+            min_df=self.min_df,
+        )
+        tfidf_matrix = self.vectorizer.fit_transform(texts)
+        n_comp = min(self.n_components, tfidf_matrix.shape[1] - 1, tfidf_matrix.shape[0] - 1)
+        if n_comp < 1:
+            self.output_columns_ = []
+            self.svd = None
+            return self
+
+        self.svd = TruncatedSVD(n_components=n_comp, random_state=42)
+        self.svd.fit(tfidf_matrix)
+        self.output_columns_ = [f"text_svd_{i}" for i in range(n_comp)]
+        return self
+
+    def transform(self, rows: pd.DataFrame) -> pd.DataFrame:
+        result = rows[["trade_date"]].copy()
+        if self.vectorizer is None or self.svd is None:
+            return result
+
+        matrix = self.vectorizer.transform(rows["text"].fillna("").tolist())
+        reduced = self.svd.transform(matrix)
+        for i, col in enumerate(self.output_columns_):
+            result[col] = reduced[:, i]
+        return result
+
+
 def _load_market_sentiment() -> pd.DataFrame:
     """Aggregate sentiment across ALL tickers per trading date."""
     conn = get_conn()
@@ -45,6 +93,33 @@ def _load_market_sentiment() -> pd.DataFrame:
     df["mkt_sentiment_3d"] = df["mkt_sentiment"].rolling(3, min_periods=1).mean()
     df["mkt_sentiment_5d"] = df["mkt_sentiment"].rolling(5, min_periods=1).mean()
     df["mkt_momentum"] = df["mkt_sentiment_3d"] - df["mkt_sentiment_5d"]
+    return df
+
+
+def load_text_by_date(symbol: str) -> pd.DataFrame:
+    """Load concatenated article text per trading date for fold-local fitting."""
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT na.trade_date,
+               GROUP_CONCAT(COALESCE(l1.key_discussion, '') || ' ' || COALESCE(nr.title, ''), ' ') AS text
+        FROM news_aligned na
+        JOIN news_raw nr ON na.news_id = nr.id
+        LEFT JOIN layer1_results l1 ON na.news_id = l1.news_id AND l1.symbol = na.symbol
+        WHERE na.symbol = ?
+        GROUP BY na.trade_date
+        ORDER BY na.trade_date
+        """,
+        (symbol,),
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        return pd.DataFrame(columns=["trade_date", "text"])
+
+    df = pd.DataFrame([dict(r) for r in rows])
+    df["trade_date"] = pd.to_datetime(df["trade_date"])
+    df["text"] = df["text"].fillna("")
     return df
 
 
@@ -93,52 +168,19 @@ def _add_candle_patterns(df: pd.DataFrame) -> pd.DataFrame:
 
 def _build_text_features(symbol: str, dates: pd.Series, n_components: int = 10) -> pd.DataFrame:
     """Build TF-IDF → SVD features from news text per trading day."""
-    conn = get_conn()
-    rows = conn.execute(
-        """
-        SELECT na.trade_date,
-               GROUP_CONCAT(COALESCE(l1.key_discussion, '') || ' ' || COALESCE(nr.title, ''), ' ') AS text
-        FROM news_aligned na
-        JOIN news_raw nr ON na.news_id = nr.id
-        LEFT JOIN layer1_results l1 ON na.news_id = l1.news_id AND l1.symbol = na.symbol
-        WHERE na.symbol = ?
-        GROUP BY na.trade_date
-        ORDER BY na.trade_date
-        """,
-        (symbol,),
-    ).fetchall()
-    conn.close()
-
-    if not rows:
+    text_df = load_text_by_date(symbol)
+    if text_df.empty:
         return pd.DataFrame({"trade_date": dates})
 
-    text_df = pd.DataFrame([dict(r) for r in rows])
-    text_df["trade_date"] = pd.to_datetime(text_df["trade_date"])
-
-    # TF-IDF on the concatenated text
-    texts = text_df["text"].fillna("").tolist()
-    if not any(t.strip() for t in texts):
+    transformer = TextSvdFeatureTransformer(n_components=n_components)
+    transformer.fit(text_df)
+    if not transformer.output_columns_:
         return pd.DataFrame({"trade_date": dates})
 
-    tfidf = TfidfVectorizer(max_features=500, stop_words="english", min_df=3)
-    tfidf_matrix = tfidf.fit_transform(texts)
-
-    # SVD to reduce dimensions
-    n_comp = min(n_components, tfidf_matrix.shape[1] - 1, tfidf_matrix.shape[0] - 1)
-    if n_comp < 1:
-        return pd.DataFrame({"trade_date": dates})
-
-    svd = TruncatedSVD(n_components=n_comp, random_state=42)
-    reduced = svd.fit_transform(tfidf_matrix)
-
-    result = text_df[["trade_date"]].copy()
-    for i in range(n_comp):
-        result[f"text_svd_{i}"] = reduced[:, i]
-
-    return result
+    return transformer.transform(text_df)
 
 
-def build_features_v2(symbol: str, use_text: bool = True) -> pd.DataFrame:
+def build_features_v2(symbol: str, use_text: bool = False) -> pd.DataFrame:
     """Build enhanced feature matrix with market, candle, and text features."""
     df = build_features(symbol)
     if df.empty:

@@ -17,6 +17,7 @@ from backend.ml.features import (
     FEATURE_COLS_WITH_MARKET,
     resolve_feature_cols,
 )
+from backend.ml.walk_forward import run_walk_forward_probabilities
 
 MODELS_DIR = Path(__file__).parent / "models"
 MODELS_DIR.mkdir(exist_ok=True)
@@ -106,12 +107,38 @@ def _compute_classification_metrics(
     return metrics
 
 
-def filter_neutral_samples(df, horizon: str, neutral_band: float | None):
+def resolve_target_col(horizon: str, target_col: str | None = None) -> str:
+    """Return the label column used by train/search paths."""
+    if target_col:
+        return target_col
+    return f"target_{horizon}"
+
+
+def resolve_return_col(horizon: str, target_col: str | None = None) -> str:
+    """Return the future-return column that matches a target column."""
+    if target_col:
+        for suffix in ("t1", "t2", "t3", "t5"):
+            if target_col.endswith(f"_{suffix}"):
+                return f"future_return_{suffix}"
+    return f"future_return_{horizon}"
+
+
+def target_path_suffix(horizon: str, target_col: str | None = None) -> str:
+    """Return a filename suffix for non-default target columns."""
+    resolved = resolve_target_col(horizon, target_col)
+    if resolved == f"target_{horizon}":
+        return ""
+    safe = "".join(ch if ch.isalnum() else "_" for ch in resolved)
+    return f"_{safe}"
+
+
+def filter_neutral_samples(df, horizon: str, neutral_band: float | None,
+                           target_col: str | None = None):
     """Drop rows where future returns are too small to provide a clear direction."""
     if neutral_band is None or neutral_band <= 0:
         return df
 
-    return_col = f"future_return_{horizon}"
+    return_col = resolve_return_col(horizon, target_col)
     if return_col not in df.columns:
         raise ValueError(f"Missing column {return_col} required for neutral filtering")
 
@@ -127,65 +154,14 @@ def _expanding_window_cv(
     model_params: dict | None = None,
 ) -> dict:
     """Run expanding-window CV and return aggregate and per-fold metrics."""
-    n = len(X)
-    if n < min_train + 20:
-        return {"error": f"Too few rows ({n}) for expanding-window CV"}
-
-    test_size = (n - min_train) // n_folds
-    if test_size < 10:
-        n_folds = max(1, (n - min_train) // 10)
-        test_size = (n - min_train) // n_folds
-
-    folds = []
-    all_true = []
-    all_pred = []
-    all_prob = []
-
-    for fold in range(n_folds):
-        train_end = min_train + fold * test_size
-        test_end = train_end + test_size if fold < n_folds - 1 else n
-
-        X_train, y_train = X[:train_end], y[:train_end]
-        X_test, y_test = X[train_end:test_end], y[train_end:test_end]
-        if len(X_test) == 0:
-            continue
-
-        model = _fit_xgb_with_train_validation(X_train, y_train, model_params)
-        X_test = np.nan_to_num(X_test.astype(np.float64), copy=False)
-        fold_prob = model.predict_proba(X_test)[:, 1]
-        fold_pred = (fold_prob >= 0.5).astype(int)
-
-        metrics = _compute_classification_metrics(y_test, fold_pred, fold_prob)
-        folds.append({
-            "fold": fold + 1,
-            "train_size": int(train_end),
-            "test_size": int(test_end - train_end),
-            "test_start": dates[train_end],
-            "test_end": dates[test_end - 1],
-            **{
-                key: (round(value, 4) if isinstance(value, float) else value)
-                for key, value in metrics.items()
-            },
-        })
-
-        all_true.extend(y_test.tolist())
-        all_pred.extend(fold_pred.tolist())
-        all_prob.extend(fold_prob.tolist())
-
-    if not all_true:
-        return {"error": "No out-of-sample predictions generated"}
-
-    y_true = np.array(all_true)
-    y_pred = np.array(all_pred)
-    y_prob = np.array(all_prob)
-    overall = _compute_classification_metrics(y_true, y_pred, y_prob)
-
-    return {
-        "n_folds": len(folds),
-        "total_predictions": len(all_true),
-        "folds": folds,
-        **overall,
-    }
+    return run_walk_forward_probabilities(
+        X=X,
+        y=y,
+        dates=dates,
+        model_factory=lambda: _build_xgb_classifier(model_params),
+        n_folds=n_folds,
+        min_train=min_train,
+    )
 
 
 def select_best_search_result(results: list[dict], metric: str = "accuracy_lift") -> dict:
@@ -229,15 +205,16 @@ def search_xgboost_params(
     metric: str = "accuracy_lift",
     include_market_benchmark: bool = False,
     neutral_band: float | None = None,
+    target_col: str | None = None,
 ) -> dict:
     """Search XGBoost parameters with expanding-window validation."""
-    target_col = f"target_{horizon}"
+    target_col = resolve_target_col(horizon, target_col)
     df = build_features(symbol, include_market_benchmark=include_market_benchmark)
     if df.empty or len(df) < min_train + 20:
         return {"error": f"Not enough data for {symbol} ({len(df)} rows)"}
 
     df = df.dropna(subset=[target_col]).reset_index(drop=True)
-    df = filter_neutral_samples(df, horizon, neutral_band)
+    df = filter_neutral_samples(df, horizon, neutral_band, target_col=target_col)
     if df.empty or len(df) < min_train + 20:
         return {"error": f"Not enough rows for {symbol}/{horizon} after neutral filtering ({len(df)} rows)"}
 
@@ -281,6 +258,7 @@ def search_xgboost_params(
     result = {
         "symbol": symbol,
         "horizon": horizon,
+        "target_col": target_col,
         "metric": metric,
         "include_market_benchmark": include_market_benchmark,
         "neutral_band": neutral_band,
@@ -308,8 +286,10 @@ def search_xgboost_params(
         )[:10],
     }
 
-    suffix = _search_suffix(include_market_benchmark, neutral_band)
-    out_path = MODELS_DIR / f"{symbol}_{horizon}_xgb_search{suffix}.json"
+    out_path = MODELS_DIR / (
+        f"{symbol}_{horizon}{target_path_suffix(horizon, target_col)}"
+        f"_xgb_search{_search_suffix(include_market_benchmark, neutral_band)}.json"
+    )
     out_path.write_text(json.dumps(result, indent=2))
     return result
 
@@ -323,16 +303,17 @@ def search_xgboost_params_unified(
     metric: str = "roc_auc",
     include_market_benchmark: bool = False,
     neutral_band: float | None = None,
+    target_col: str | None = None,
 ) -> dict:
     """Search XGBoost params on combined multi-ticker data with expanding-window CV."""
-    target_col = f"target_{horizon}"
+    target_col = resolve_target_col(horizon, target_col)
     df = build_features_multi(symbols, include_market_benchmark=include_market_benchmark)
     if df.empty or len(df) < min_train + 20:
         return {"error": f"Not enough combined data for unified search ({len(df)} rows)"}
 
     df = df.sort_values(["trade_date", "symbol"]).reset_index(drop=True)
     df = df.dropna(subset=[target_col]).reset_index(drop=True)
-    df = filter_neutral_samples(df, horizon, neutral_band)
+    df = filter_neutral_samples(df, horizon, neutral_band, target_col=target_col)
     if df.empty or len(df) < min_train + 20:
         return {"error": f"Not enough combined rows after neutral filtering ({len(df)} rows)"}
 
@@ -376,6 +357,7 @@ def search_xgboost_params_unified(
     return {
         "symbol": "UNIFIED",
         "horizon": horizon,
+        "target_col": target_col,
         "metric": metric,
         "include_market_benchmark": include_market_benchmark,
         "neutral_band": neutral_band,
@@ -395,9 +377,10 @@ def search_xgboost_params_unified(
 
 def train(symbol: str, horizon: str = "t1", model_params: dict | None = None,
           include_market_benchmark: bool = False,
-          neutral_band: float | None = None) -> dict:
+          neutral_band: float | None = None,
+          target_col: str | None = None) -> dict:
     """Train XGBoost for a single symbol/horizon. Returns metrics dict."""
-    target_col = f"target_{horizon}"
+    target_col = resolve_target_col(horizon, target_col)
 
     df = build_features(symbol, include_market_benchmark=include_market_benchmark)
     if df.empty or len(df) < 60:
@@ -405,7 +388,7 @@ def train(symbol: str, horizon: str = "t1", model_params: dict | None = None,
 
     # Drop rows where target is NaN (last few days)
     df = df.dropna(subset=[target_col]).reset_index(drop=True)
-    df = filter_neutral_samples(df, horizon, neutral_band)
+    df = filter_neutral_samples(df, horizon, neutral_band, target_col=target_col)
     if df.empty or len(df) < 60:
         return {"error": f"Not enough data for {symbol}/{horizon} after neutral filtering ({len(df)} rows)"}
 
@@ -443,6 +426,7 @@ def train(symbol: str, horizon: str = "t1", model_params: dict | None = None,
     meta = {
         "symbol": symbol,
         "horizon": horizon,
+        "target_col": target_col,
         "accuracy": round(accuracy, 4),
         "baseline": round(baseline, 4),
         "precision": round(precision_score(y_test, y_pred, zero_division=0), 4),
@@ -464,12 +448,13 @@ def train(symbol: str, horizon: str = "t1", model_params: dict | None = None,
     }
 
     # Save
-    model_path = MODELS_DIR / f"{symbol}_{horizon}.joblib"
-    meta_path = MODELS_DIR / f"{symbol}_{horizon}_meta.json"
+    suffix = target_path_suffix(horizon, target_col)
+    model_path = MODELS_DIR / f"{symbol}_{horizon}{suffix}.joblib"
+    meta_path = MODELS_DIR / f"{symbol}_{horizon}{suffix}_meta.json"
 
     # 使用 XGBoost 原生格式保存，更稳定且跨版本兼容
     booster = model.get_booster()
-    json_path = MODELS_DIR / f"{symbol}_{horizon}_xgboost.json"
+    json_path = MODELS_DIR / f"{symbol}_{horizon}{suffix}_xgboost.json"
     booster.save_model(str(json_path))
 
     # 同时保留 joblib 以保持向后兼容
@@ -483,16 +468,17 @@ def train(symbol: str, horizon: str = "t1", model_params: dict | None = None,
 def train_unified(horizon: str = "t1", symbols: list[str] | None = None,
                   model_params: dict | None = None,
                   include_market_benchmark: bool = False,
-                  neutral_band: float | None = None) -> dict:
+                  neutral_band: float | None = None,
+                  target_col: str | None = None) -> dict:
     """Train a single XGBoost on ALL tickers combined. Returns metrics dict."""
-    target_col = f"target_{horizon}"
+    target_col = resolve_target_col(horizon, target_col)
 
     df = build_features_multi(symbols, include_market_benchmark=include_market_benchmark)
     if df.empty or len(df) < 100:
         return {"error": f"Not enough combined data ({len(df)} rows)"}
 
     df = df.dropna(subset=[target_col]).reset_index(drop=True)
-    df = filter_neutral_samples(df, horizon, neutral_band)
+    df = filter_neutral_samples(df, horizon, neutral_band, target_col=target_col)
     if df.empty or len(df) < 100:
         return {"error": f"Not enough combined rows after neutral filtering ({len(df)} rows)"}
 
@@ -530,6 +516,7 @@ def train_unified(horizon: str = "t1", symbols: list[str] | None = None,
     meta = {
         "symbol": "UNIFIED",
         "horizon": horizon,
+        "target_col": target_col,
         "accuracy": round(accuracy, 4),
         "baseline": round(baseline, 4),
         "precision": round(precision_score(y_test, y_pred, zero_division=0), 4),
@@ -551,12 +538,13 @@ def train_unified(horizon: str = "t1", symbols: list[str] | None = None,
         "trained_at": datetime.now().isoformat(),
     }
 
-    model_path = MODELS_DIR / f"UNIFIED_{horizon}.joblib"
-    meta_path = MODELS_DIR / f"UNIFIED_{horizon}_meta.json"
+    suffix = target_path_suffix(horizon, target_col)
+    model_path = MODELS_DIR / f"UNIFIED_{horizon}{suffix}.joblib"
+    meta_path = MODELS_DIR / f"UNIFIED_{horizon}{suffix}_meta.json"
 
     # 使用 XGBoost 原生格式保存，更稳定且跨版本兼容
     booster = model.get_booster()
-    json_path = MODELS_DIR / f"UNIFIED_{horizon}_xgboost.json"
+    json_path = MODELS_DIR / f"UNIFIED_{horizon}{suffix}_xgboost.json"
     booster.save_model(str(json_path))
 
     # 同时保留 joblib 以保持向后兼容

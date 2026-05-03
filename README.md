@@ -98,8 +98,9 @@ flowchart LR
 | `day_of_week` | 星期几（季节因子） |
 
 **目标变量**
-- `target_t1`：次日收盘是否上涨（二分类）
-- `target_t5`：5 日后收盘是否上涨（二分类）
+- `target_t1` / `target_t5`：标准涨跌方向标签
+- `target_up_big_t5`：`T+5` 涨幅超过 3% 的低噪声标签
+- `target_big1_t5` / `target_big2_t5`：未来 5 日绝对波动超过 1% / 2%
 
 ### 2. 模型训练 (`backend/ml/model.py`)
 
@@ -116,11 +117,22 @@ XGBClassifier(
 )
 ```
 
-- **数据分割**：按时间序列顺序划分，前 80% 训练，后 20% 测试，避免未来信息泄露
-- **评估指标**：Accuracy、Precision、Recall、F1，并与基线（多数类占比）对比
-- **模型持久化**：训练完成后保存为 `.joblib`，元数据（特征重要性、训练区间等）保存为 `.json`
+- **扩展窗口验证**（`backend/ml/walk_forward.py`）：参数搜索和实验评估采用 expanding-window CV；启用文本特征的实验会在每折训练窗口内拟合文本变换器，再转换测试窗口
+- **显式目标列**：`--target-col` 参数支持传入任意目标列（如 `target_up_big_t5`），自动推导对应收益列用于中性过滤
+- **评估指标**：Accuracy、Precision、Recall、F1、ROC-AUC，并与基线（多数类占比）对比
+- **模型持久化**：`.joblib` + XGBoost 原生 `.json` 格式双保存，元数据保存为 `_meta.json`；非默认目标列会写入带目标后缀的独立产物，避免覆盖标准 `target_t5` 模型
 
-### 3. 策略回测 (`backend/ml/strategy_backtest.py`)
+### 3. 评估报告 (`backend/ml/evaluation_report.py`)
+
+多股票聚合评估工具：
+
+```bash
+python -m backend.ml.train --evaluation-report --horizon t5 --target-col target_up_big_t5 --metric roc_auc
+```
+
+输出 `evaluation_summary.json`，包含每只股票的 AUC、准确率、Lift，以及跨股票的平均 AUC、中位数和超过 0.5 的比例。
+
+### 4. 策略回测 (`backend/ml/strategy_backtest.py`)
 
 将模型输出的上涨概率 `prob_up` 转换为**long/cash 交易信号**：
 
@@ -219,6 +231,19 @@ anthropic_api_key=your_anthropic_key
 | 批量 Layer 1 分析 | `python -m backend.batch_submit --top 50` |
 | 策略回测扫描 | `python -m backend.ml.strategy_backtest --scan` |
 | 查看单策略详情 | `python -m backend.ml.strategy_backtest --symbol MU --horizon t5 --threshold 0.5` |
+
+### ML 训练与评估命令
+
+```powershell
+# 参数搜索（扩展窗口 CV）
+python -m backend.ml.train --search-params --symbol AAPL --horizon t5
+
+# 使用显式低噪声目标搜索，输出文件会带 target_up_big_t5 后缀
+python -m backend.ml.train --search-params --symbol AAPL --horizon t5 --target-col target_up_big_t5 --metric roc_auc
+
+# 生成多股票评估报告
+python -m backend.ml.train --evaluation-report --horizon t5 --target-col target_up_big_t5 --metric roc_auc --evaluation-output backend/ml/models/evaluation_summary.json
+```
 
 ## 技术栈
 

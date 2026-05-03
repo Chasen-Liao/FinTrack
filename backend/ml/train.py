@@ -7,6 +7,7 @@ import json
 from backend.database import get_conn
 from backend.ml.model import train, search_xgboost_params, search_xgboost_params_unified
 from backend.ml.backtest import run_backtest
+from backend.ml.evaluation_report import run_multi_stock_evaluation
 
 HORIZONS = ["t1", "t5"]
 SEARCH_METRICS = ["accuracy_lift", "roc_auc", "f1"]
@@ -42,10 +43,39 @@ def main():
     parser.add_argument("--metric", choices=SEARCH_METRICS, default="accuracy_lift",
                         help="Primary metric used to rank expanding-window search candidates")
     parser.add_argument("--unified", action="store_true", help="Use the combined multi-ticker training/search path")
+    parser.add_argument("--target-col", type=str,
+                        help="Explicit target column, such as target_up_big_t5")
+    parser.add_argument("--evaluation-report", action="store_true",
+                        help="Generate report-ready aggregate evaluation JSON")
+    parser.add_argument("--evaluation-output", type=str,
+                        default="backend/ml/models/evaluation_summary.json",
+                        help="Output path for --evaluation-report")
     args = parser.parse_args()
 
     symbols = [args.symbol.upper()] if args.symbol else get_symbols()
     horizons = [args.horizon] if args.horizon else HORIZONS
+
+    if args.evaluation_report:
+        if len(horizons) != 1:
+            raise SystemExit("--evaluation-report requires --horizon")
+        report = run_multi_stock_evaluation(
+            symbols=symbols,
+            horizon=horizons[0],
+            target_col=args.target_col,
+            metric=args.metric,
+            neutral_band=args.neutral_band,
+            include_market_benchmark=args.market_benchmark,
+            output_path=args.evaluation_output,
+        )
+        summary = report["summary"]
+        print(
+            f"Evaluation report: n={summary['count']} "
+            f"auc_mean={summary['roc_auc_mean']} "
+            f"auc_median={summary['roc_auc_median']} "
+            f"auc>0.5={summary['roc_auc_above_0_5_ratio']}"
+        )
+        return
+
     print(f"Training for {len(symbols)} ticker(s): {', '.join(symbols)}")
 
     t0 = time.time()
@@ -60,6 +90,7 @@ def main():
                     metric=args.metric,
                     include_market_benchmark=args.market_benchmark,
                     neutral_band=args.neutral_band,
+                    target_col=args.target_col,
                 )
                 if "error" in search:
                     print(f"  UNIFIED/{h} search: {search['error']}")
@@ -83,6 +114,7 @@ def main():
                     metric=args.metric,
                     include_market_benchmark=args.market_benchmark,
                     neutral_band=args.neutral_band,
+                    target_col=args.target_col,
                 )
                 if "error" in search:
                     print(f"  {sym}/{h} search: {search['error']}")
@@ -107,6 +139,7 @@ def main():
                     model_params=search["best_params"],
                     include_market_benchmark=args.market_benchmark,
                     neutral_band=args.neutral_band,
+                    target_col=args.target_col,
                 )
             else:
                 result = train(
@@ -114,6 +147,7 @@ def main():
                     h,
                     include_market_benchmark=args.market_benchmark,
                     neutral_band=args.neutral_band,
+                    target_col=args.target_col,
                 )
             if "error" in result:
                 print(f"  {sym}/{h}: {result['error']}")

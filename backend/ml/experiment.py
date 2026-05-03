@@ -1,75 +1,75 @@
 """Comparative experiment: test multiple feature sets, models, and targets."""
 
 import numpy as np
+import pandas as pd
 from xgboost import XGBClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
 from backend.ml.features_v2 import (
     build_features_v2,
     FEATURE_COLS,
     FEATURE_COLS_V2_MARKET,
     FEATURE_COLS_V2_CANDLE,
-    get_feature_cols_v2_full,
+    TextSvdFeatureTransformer,
+    load_text_by_date,
 )
+from backend.ml.walk_forward import run_walk_forward_probabilities
 
 
-def _expanding_cv(X, y, n_folds=5, min_train=200, model_cls=None, model_kwargs=None):
+class TextSvdAppendingTransformer:
+    """Append fold-local text SVD columns to numeric feature columns."""
+
+    def __init__(self, numeric_cols: list[str]):
+        self.numeric_cols = numeric_cols
+        self.text_transformer = TextSvdFeatureTransformer()
+
+    def fit(self, rows: pd.DataFrame, y=None):
+        self.text_transformer.fit(rows[["trade_date", "text"]], y)
+        return self
+
+    def transform(self, rows: pd.DataFrame) -> pd.DataFrame:
+        numeric = rows[self.numeric_cols].reset_index(drop=True)
+        text_features = self.text_transformer.transform(rows[["trade_date", "text"]])
+        text_features = text_features.drop(columns=["trade_date"], errors="ignore").reset_index(drop=True)
+        if text_features.empty:
+            return numeric
+        return pd.concat([numeric, text_features], axis=1)
+
+
+def _expanding_cv(X, y, dates=None, n_folds=5, min_train=200, model_cls=None,
+                  model_kwargs=None, transformer_factory=None):
     """Run expanding-window CV and return aggregate metrics."""
-    n = len(X)
-    if n < min_train + 20:
-        return None
-
-    test_size = (n - min_train) // n_folds
-    if test_size < 10:
-        n_folds = max(1, (n - min_train) // 10)
-        test_size = (n - min_train) // n_folds
-
-    all_true, all_pred, all_prob = [], [], []
-
-    for fold in range(n_folds):
-        train_end = min_train + fold * test_size
-        test_end = train_end + test_size if fold < n_folds - 1 else n
-
-        X_tr, y_tr = X[:train_end], y[:train_end]
-        X_te, y_te = X[train_end:test_end], y[train_end:test_end]
-
+    def make_model():
         if model_cls is None:
-            model = XGBClassifier(
+            return XGBClassifier(
                 max_depth=4, n_estimators=200, learning_rate=0.05,
                 subsample=0.8, colsample_bytree=0.8,
                 eval_metric="logloss", random_state=42,
             )
-        else:
-            model = model_cls(**(model_kwargs or {}))
+        return model_cls(**(model_kwargs or {}))
 
-        # Handle NaN
-        X_tr = np.nan_to_num(X_tr, nan=0.0)
-        X_te = np.nan_to_num(X_te, nan=0.0)
-
-        model.fit(X_tr, y_tr)
-        y_prob = model.predict_proba(X_te)[:, 1]
-        y_p = (y_prob >= 0.5).astype(int)
-        all_true.extend(y_te.tolist())
-        all_pred.extend(y_p.tolist())
-        all_prob.extend(y_prob.tolist())
-
-    t = np.array(all_true)
-    p = np.array(all_pred)
-    prob = np.array(all_prob)
-    acc = accuracy_score(t, p)
-    base = max(t.mean(), 1 - t.mean())
+    result = run_walk_forward_probabilities(
+        X=X,
+        y=y,
+        dates=dates or [str(i) for i in range(len(y))],
+        model_factory=make_model,
+        transformer_factory=transformer_factory,
+        n_folds=n_folds,
+        min_train=min_train,
+    )
+    if "error" in result:
+        return None
 
     return {
-        "n": len(t),
-        "accuracy": round(acc, 4),
-        "baseline": round(base, 4),
-        "lift": round((acc - base) * 100, 1),
-        "precision": round(precision_score(t, p, zero_division=0), 4),
-        "recall": round(recall_score(t, p, zero_division=0), 4),
-        "f1": round(f1_score(t, p, zero_division=0), 4),
-        "roc_auc": round(roc_auc_score(t, prob), 4),
+        "n": result["total_predictions"],
+        "accuracy": round(result["accuracy"], 4),
+        "baseline": round(result["baseline"], 4),
+        "lift": round(result["accuracy_lift"] * 100, 1),
+        "precision": round(result["precision"], 4),
+        "recall": round(result["recall"], 4),
+        "f1": round(result["f1"], 4),
+        "roc_auc": round(result["roc_auc"], 4) if result["roc_auc"] is not None else None,
     }
 
 
@@ -79,19 +79,24 @@ def run_experiment(symbol: str):
     print(f"  {symbol} — Comparative Experiment")
     print(f"{'='*60}")
 
-    df = build_features_v2(symbol)
+    df = build_features_v2(symbol, use_text=False)
     if df.empty or len(df) < 250:
         print(f"  Not enough data: {len(df)} rows")
         return
 
-    full_cols = get_feature_cols_v2_full(df)
+    text_by_date = load_text_by_date(symbol)
+    if text_by_date.empty:
+        df["text"] = ""
+    else:
+        df = df.merge(text_by_date, on="trade_date", how="left")
+        df["text"] = df["text"].fillna("")
 
     # Define experiments
     feature_sets = {
-        "v1_base":      FEATURE_COLS,
-        "v2_market":    FEATURE_COLS_V2_MARKET,
-        "v2_candle":    FEATURE_COLS_V2_CANDLE,
-        "v2_full":      full_cols,
+        "v1_base":   {"cols": FEATURE_COLS, "use_text": False},
+        "v2_market": {"cols": FEATURE_COLS_V2_MARKET, "use_text": False},
+        "v2_candle": {"cols": FEATURE_COLS_V2_CANDLE, "use_text": False},
+        "v2_full":   {"cols": FEATURE_COLS_V2_CANDLE, "use_text": True},
     }
 
     targets = {
@@ -119,14 +124,29 @@ def run_experiment(symbol: str):
             continue
         y = sub[target_col].values
 
-        for feat_name, feat_cols in feature_sets.items():
+        dates = sub["trade_date"].dt.strftime("%Y-%m-%d").tolist()
+
+        for feat_name, feat_spec in feature_sets.items():
             # Only use columns that exist
-            valid_cols = [c for c in feat_cols if c in sub.columns]
-            X = sub[valid_cols].values.astype(np.float64)
+            valid_cols = [c for c in feat_spec["cols"] if c in sub.columns]
+            if feat_spec["use_text"]:
+                X = sub[valid_cols + ["trade_date", "text"]].copy()
+                transformer_factory = lambda cols=valid_cols: TextSvdAppendingTransformer(cols)
+            else:
+                X = sub[valid_cols].values.astype(np.float64)
+                transformer_factory = None
 
             for model_name, (model_cls, model_kw) in models.items():
-                r = _expanding_cv(X, y, n_folds=5, min_train=200,
-                                  model_cls=model_cls, model_kwargs=model_kw)
+                r = _expanding_cv(
+                    X,
+                    y,
+                    dates=dates,
+                    n_folds=5,
+                    min_train=200,
+                    model_cls=model_cls,
+                    model_kwargs=model_kw,
+                    transformer_factory=transformer_factory,
+                )
                 if r is None:
                     continue
                 results.append({
@@ -137,21 +157,30 @@ def run_experiment(symbol: str):
                 })
 
     # Print results sorted by auc then lift
-    results.sort(key=lambda x: (x["roc_auc"], x["lift"], x["f1"]), reverse=True)
+    results.sort(
+        key=lambda x: (
+            float("-inf") if x["roc_auc"] is None else x["roc_auc"],
+            x["lift"],
+            x["f1"],
+        ),
+        reverse=True,
+    )
 
     print(f"\n{'Target':<18} {'Features':<12} {'Model':<8} {'AUC':>6} {'Acc':>6} {'Base':>6} {'Lift':>6} {'F1':>6}")
     print("-" * 82)
     for r in results:
         lift_str = f"{r['lift']:+.1f}pp"
+        auc_str = "n/a" if r["roc_auc"] is None else f"{r['roc_auc']:5.3f}"
         print(f"{r['target']:<18} {r['features']:<12} {r['model']:<8} "
-              f"{r['roc_auc']:5.3f} {r['accuracy']*100:5.1f}% {r['baseline']*100:5.1f}% {lift_str:>6} "
+              f"{auc_str:>6} {r['accuracy']*100:5.1f}% {r['baseline']*100:5.1f}% {lift_str:>6} "
               f"{r['f1']*100:5.1f}%")
 
     # Top 5
     print(f"\n  Top 5 by AUC:")
     for i, r in enumerate(results[:5]):
+        auc_str = "n/a" if r["roc_auc"] is None else f"{r['roc_auc']:.3f}"
         print(f"  {i+1}. {r['target']} + {r['features']} + {r['model']}: "
-              f"auc={r['roc_auc']:.3f} acc={r['accuracy']*100:.1f}% lift={r['lift']:+.1f}pp f1={r['f1']*100:.1f}%")
+              f"auc={auc_str} acc={r['accuracy']*100:.1f}% lift={r['lift']:+.1f}pp f1={r['f1']*100:.1f}%")
 
     return results
 

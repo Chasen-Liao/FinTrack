@@ -1,5 +1,7 @@
 # ML Pipeline Improvement Implementation Plan
 
+> **Status: Implemented** — All 5 tasks completed 2026-05-03; review follow-up applied for target-specific artifact names and fold-local text SVD in `experiment.py`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the ML evidence chain consistent by supporting explicit low-noise targets, shared walk-forward evaluation, leak-safe text features, and a report-ready multi-stock evaluation summary.
@@ -36,6 +38,8 @@
 ## Scope Notes
 
 This plan intentionally does not retrain all saved models. Any implementation that writes into `backend/ml/models/` should be limited to explicit user-run commands after the code changes pass tests.
+
+Review follow-up note: non-default targets now use target-specific filename suffixes such as `_target_up_big_t5`, and `target_col` is recorded in metadata/search payloads so low-noise experiments do not silently overwrite standard `target_t5` artifacts.
 
 ### Task 1: Add Explicit Target Selection To Model Search And Training
 
@@ -896,7 +900,8 @@ If the artifact is only a local exploratory run, leave it uncommitted and mentio
 
 ## Self-Review Checklist
 
-- Spec coverage: Task 1 covers explicit low-noise target selection; Task 2 covers shared walk-forward evaluation; Task 3 covers leak-safe text features; Task 4 covers report-ready aggregate metrics; Task 5 covers evidence generation without overwriting existing models.
+- Spec coverage: Task 1 covers explicit low-noise target selection and target-specific artifact names; Task 2 covers shared walk-forward evaluation; Task 3 covers fold-local text features in the experiment path; Task 4 covers report-ready aggregate metrics; Task 5 covers evidence generation without overwriting existing models.
 - Placeholder scan: This plan contains no placeholder markers, no open-ended test instructions, and no missing file paths.
 - Type consistency: `target_col`, `neutral_band`, `roc_auc`, `accuracy_lift`, and `run_walk_forward_probabilities` use the same names across tasks.
 - Scope check: The plan is a single implementation track focused on ML evidence quality. Deep learning experiments and full report rewrites remain outside this plan.
+- Verification: targeted ML tests pass for model search, walk-forward evaluation, text features, evaluation reports, feature enhancements, and strategy backtests. Full `tests/ml/` still has two unrelated LSTM test failures caused by PyTorch/temp-directory behavior on Windows.
