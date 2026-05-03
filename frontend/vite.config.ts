@@ -10,13 +10,13 @@ export default defineConfig({
       '/PokieTicker/api': {
         target: process.env.VITE_API_TARGET || 'http://127.0.0.1:8000',
         changeOrigin: true,
-        secure: true,
+        secure: false,
         rewrite: (path) => path.replace(/^\/PokieTicker/, ''),
       },
       '/api': {
         target: process.env.VITE_API_TARGET || 'http://127.0.0.1:8000',
         changeOrigin: true,
-        secure: true,
+        secure: false,
       },
     },
   },
