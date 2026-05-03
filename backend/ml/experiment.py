@@ -1,10 +1,14 @@
 """Comparative experiment: test multiple feature sets, models, and targets."""
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from xgboost import XGBClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from lightgbm import LGBMClassifier
 
 from backend.ml.features_v2 import (
     build_features_v2,
@@ -15,6 +19,9 @@ from backend.ml.features_v2 import (
     load_text_by_date,
 )
 from backend.ml.walk_forward import run_walk_forward_probabilities
+
+MODELS_DIR = Path(__file__).parent / "models"
+MODELS_DIR.mkdir(exist_ok=True)
 
 
 class TextSvdAppendingTransformer:
@@ -114,6 +121,11 @@ def run_experiment(symbol: str):
         "XGBoost":  (None, None),
         "LogReg":   (LogisticRegression, {"max_iter": 1000, "C": 0.1, "random_state": 42}),
         "RF":       (RandomForestClassifier, {"n_estimators": 200, "max_depth": 6, "random_state": 42}),
+        "LightGBM": (LGBMClassifier, {
+            "n_estimators": 200, "max_depth": 4, "learning_rate": 0.05,
+            "subsample": 0.8, "colsample_bytree": 0.8, "min_child_samples": 20,
+            "random_state": 42, "verbose": -1,
+        }),
     }
 
     # Run combinations
@@ -181,6 +193,28 @@ def run_experiment(symbol: str):
         auc_str = "n/a" if r["roc_auc"] is None else f"{r['roc_auc']:.3f}"
         print(f"  {i+1}. {r['target']} + {r['features']} + {r['model']}: "
               f"auc={auc_str} acc={r['accuracy']*100:.1f}% lift={r['lift']:+.1f}pp f1={r['f1']*100:.1f}%")
+
+    # LightGBM vs XGBoost head-to-head summary
+    lgbm_rows = [r for r in results if r["model"] == "LightGBM"]
+    xgb_rows = [r for r in results if r["model"] == "XGBoost"]
+    if lgbm_rows and xgb_rows:
+        lgbm_auc_vals = [r["roc_auc"] for r in lgbm_rows if r["roc_auc"] is not None]
+        xgb_auc_vals = [r["roc_auc"] for r in xgb_rows if r["roc_auc"] is not None]
+        lgbm_f1_vals = [r["f1"] for r in lgbm_rows]
+        xgb_f1_vals = [r["f1"] for r in xgb_rows]
+        lgbm_lift_vals = [r["lift"] for r in lgbm_rows]
+        xgb_lift_vals = [r["lift"] for r in xgb_rows]
+        print(f"\n  LightGBM vs XGBoost (paired over {len(lgbm_rows)} combos):")
+        if lgbm_auc_vals and xgb_auc_vals:
+            print(f"    AUC  — LightGBM avg={np.mean(lgbm_auc_vals):.4f}  XGBoost avg={np.mean(xgb_auc_vals):.4f}")
+        print(f"    F1   — LightGBM avg={np.mean(lgbm_f1_vals):.4f}  XGBoost avg={np.mean(xgb_f1_vals):.4f}")
+        print(f"    Lift — LightGBM avg={np.mean(lgbm_lift_vals):+.1f}pp  XGBoost avg={np.mean(xgb_lift_vals):+.1f}pp")
+
+    # Save results to JSON
+    out_path = MODELS_DIR / f"{symbol}_experiment_results.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump({"symbol": symbol, "results": results}, f, indent=2, ensure_ascii=False)
+    print(f"\n  Results saved to {out_path}")
 
     return results
 
