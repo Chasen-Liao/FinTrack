@@ -131,7 +131,9 @@ def build_features_filtered(symbol: str, exclude_neutral: bool = True) -> pd.Dat
     # Targets
     df["target_t1"] = (close.shift(-1) > close).astype(int)
     df["target_t3"] = (close.shift(-3) > close).astype(int)
+    df["target_t5"] = (close.shift(-5) > close).astype(int)
     df["target_big1_t1"] = ((close.shift(-1) / close - 1).abs() > 0.01).astype(int)
+    df["target_up_big_t5"] = ((close.shift(-5) / close - 1) > 0.03).astype(int)
 
     df = df.dropna(subset=["ret_10d", "rsi_14"]).reset_index(drop=True)
     return df

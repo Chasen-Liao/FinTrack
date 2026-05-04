@@ -15,7 +15,7 @@ SEARCH_METRICS = ["accuracy_lift", "roc_auc", "f1"]
 # Best LSTM configs per ticker (from experiments)
 LSTM_CONFIGS = {
     "TSLA": {"target_col": "target_t3", "seq_len": 10, "exclude_neutral": False},
-    # Add more tickers here as LSTM proves beneficial
+    "MU":   {"target_col": "target_t3", "seq_len": 10, "exclude_neutral": True},
 }
 
 
@@ -33,6 +33,7 @@ def main():
     parser.add_argument("--symbol", type=str, help="Train only this ticker")
     parser.add_argument("--backtest", action="store_true", help="Run backtest after training")
     parser.add_argument("--lstm", action="store_true", help="Also train LSTM for configured tickers")
+    parser.add_argument("--lstm-only", action="store_true", help="Only train LSTM, skip XGBoost")
     parser.add_argument("--search-params", action="store_true", help="Search XGBoost params with expanding-window CV")
     parser.add_argument("--horizon", choices=HORIZONS, help="Search or train only one horizon")
     parser.add_argument("--folds", type=int, default=5, help="Expanding-window fold count for search")
@@ -80,99 +81,123 @@ def main():
 
     t0 = time.time()
     for sym in symbols:
-        for h in horizons:
-            if args.search_params and args.unified:
-                search = search_xgboost_params_unified(
-                    horizon=h,
-                    symbols=symbols,
-                    n_folds=args.folds,
-                    min_train=args.min_train,
-                    metric=args.metric,
-                    include_market_benchmark=args.market_benchmark,
-                    neutral_band=args.neutral_band,
-                    target_col=args.target_col,
-                )
-                if "error" in search:
-                    print(f"  UNIFIED/{h} search: {search['error']}")
-                    continue
-                best = search["best_metrics"]
-                print(
-                    f"  UNIFIED/{h} search ({args.metric}): "
-                    f"lift={best['accuracy_lift']:.2%} "
-                    f"auc={best['roc_auc']:.4f} "
-                    f"acc={best['accuracy']:.1%} "
-                    f"f1={best['f1']:.1%}"
-                )
-                continue
-
-            if args.search_params:
-                search = search_xgboost_params(
-                    sym,
-                    h,
-                    n_folds=args.folds,
-                    min_train=args.min_train,
-                    metric=args.metric,
-                    include_market_benchmark=args.market_benchmark,
-                    neutral_band=args.neutral_band,
-                    target_col=args.target_col,
-                )
-                if "error" in search:
-                    print(f"  {sym}/{h} search: {search['error']}")
+        # Skip XGBoost if --lstm-only
+        if not args.lstm_only:
+            for h in horizons:
+                if args.search_params and args.unified:
+                    search = search_xgboost_params_unified(
+                        horizon=h,
+                        symbols=symbols,
+                        n_folds=args.folds,
+                        min_train=args.min_train,
+                        metric=args.metric,
+                        include_market_benchmark=args.market_benchmark,
+                        neutral_band=args.neutral_band,
+                        target_col=args.target_col,
+                    )
+                    if "error" in search:
+                        print(f"  UNIFIED/{h} search: {search['error']}")
+                        continue
+                    best = search["best_metrics"]
+                    print(
+                        f"  UNIFIED/{h} search ({args.metric}): "
+                        f"lift={best['accuracy_lift']:.2%} "
+                        f"auc={best['roc_auc']:.4f} "
+                        f"acc={best['accuracy']:.1%} "
+                        f"f1={best['f1']:.1%}"
+                    )
                     continue
 
-                best = search["best_metrics"]
-                print(
-                    f"  {sym}/{h} search ({args.metric}): "
-                    f"lift={best['accuracy_lift']:.2%} "
-                    f"auc={best['roc_auc']:.4f} "
-                    f"acc={best['accuracy']:.1%} "
-                    f"f1={best['f1']:.1%} "
-                    f"params={json.dumps(search['best_params'], ensure_ascii=False)}"
-                )
+                if args.search_params:
+                    search = search_xgboost_params(
+                        sym,
+                        h,
+                        n_folds=args.folds,
+                        min_train=args.min_train,
+                        metric=args.metric,
+                        include_market_benchmark=args.market_benchmark,
+                        neutral_band=args.neutral_band,
+                        target_col=args.target_col,
+                    )
+                    if "error" in search:
+                        print(f"  {sym}/{h} search: {search['error']}")
+                        continue
 
-                if not args.apply_best_params:
-                    continue
+                    best = search["best_metrics"]
+                    print(
+                        f"  {sym}/{h} search ({args.metric}): "
+                        f"lift={best['accuracy_lift']:.2%} "
+                        f"auc={best['roc_auc']:.4f} "
+                        f"acc={best['accuracy']:.1%} "
+                        f"f1={best['f1']:.1%} "
+                        f"params={json.dumps(search['best_params'], ensure_ascii=False)}"
+                    )
 
-                result = train(
-                    sym,
-                    h,
-                    model_params=search["best_params"],
-                    include_market_benchmark=args.market_benchmark,
-                    neutral_band=args.neutral_band,
-                    target_col=args.target_col,
-                )
-            else:
-                result = train(
-                    sym,
-                    h,
-                    include_market_benchmark=args.market_benchmark,
-                    neutral_band=args.neutral_band,
-                    target_col=args.target_col,
-                )
-            if "error" in result:
-                print(f"  {sym}/{h}: {result['error']}")
-            else:
-                print(f"  {sym}/{h}: acc={result['accuracy']:.1%} baseline={result['baseline']:.1%} "
-                      f"(train={result['train_size']}, test={result['test_size']})")
+                    if not args.apply_best_params:
+                        continue
 
-            if args.backtest and "error" not in result:
-                bt = run_backtest(sym, h)
-                if "error" in bt:
-                    print(f"    backtest: {bt['error']}")
+                    result = train(
+                        sym,
+                        h,
+                        model_params=search["best_params"],
+                        include_market_benchmark=args.market_benchmark,
+                        neutral_band=args.neutral_band,
+                        target_col=args.target_col,
+                    )
                 else:
-                    print(f"    backtest: {bt['n_folds']} folds, "
-                          f"acc={bt['overall_accuracy']:.1%} baseline={bt['overall_baseline']:.1%}")
+                    result = train(
+                        sym,
+                        h,
+                        include_market_benchmark=args.market_benchmark,
+                        neutral_band=args.neutral_band,
+                        target_col=args.target_col,
+                    )
+                if "error" in result:
+                    print(f"  {sym}/{h}: {result['error']}")
+                else:
+                    print(f"  {sym}/{h}: acc={result['accuracy']:.1%} baseline={result['baseline']:.1%} "
+                          f"(train={result['train_size']}, test={result['test_size']})")
+
+                if args.backtest and "error" not in result:
+                    bt = run_backtest(sym, h)
+                    if "error" in bt:
+                        print(f"    backtest: {bt['error']}")
+                    else:
+                        print(f"    backtest: {bt['n_folds']} folds, "
+                              f"acc={bt['overall_accuracy']:.1%} baseline={bt['overall_baseline']:.1%}")
 
         # LSTM training for configured tickers
-        if args.lstm and sym in LSTM_CONFIGS:
-            from backend.ml.lstm_model import train_and_save_lstm
-            cfg = LSTM_CONFIGS[sym]
+        if (args.lstm or args.lstm_only) and sym in LSTM_CONFIGS:
+            from backend.ml.lstm_model import train_and_save_lstm, run_lstm_backtest
+            from pathlib import Path
+
+            cfg = dict(LSTM_CONFIGS[sym])
+            if args.target_col:
+                cfg["target_col"] = args.target_col
             print(f"  {sym}/LSTM: training {cfg['target_col']} seq={cfg['seq_len']}...")
             result = train_and_save_lstm(sym, **cfg, epochs=50)
             if "error" in result:
                 print(f"    LSTM: {result['error']}")
             else:
                 print(f"    LSTM: saved ({result['train_size']} sequences)")
+
+            # Run expanding-window backtest and save results
+            print(f"  {sym}/LSTM: running backtest...")
+            bt = run_lstm_backtest(sym, **cfg)
+            if "error" in bt:
+                print(f"    LSTM backtest: {bt['error']}")
+            else:
+                models_dir = Path(__file__).parent / "models"
+                neutral_suffix = "exneutral" if cfg.get("exclude_neutral") else "allnews"
+                bt_path = models_dir / (
+                    f"{sym}_lstm_{cfg['target_col']}_seq{cfg['seq_len']}_{neutral_suffix}_backtest.json"
+                )
+                bt_path.write_text(json.dumps(bt, indent=2))
+                print(f"    LSTM backtest: {bt['n_folds']} folds, "
+                      f"acc={bt['overall_accuracy']:.1%} baseline={bt['overall_baseline']:.1%} "
+                      f"lift={bt['lift']:+.1f}pp "
+                      f"prec={bt['overall_precision']:.1%} rec={bt['overall_recall']:.1%} "
+                      f"f1={bt['overall_f1']:.1%}")
 
     print(f"\nDone in {time.time() - t0:.1f}s")
 
