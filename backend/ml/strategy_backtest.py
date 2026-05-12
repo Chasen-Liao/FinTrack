@@ -465,10 +465,8 @@ def build_strategy_features(symbol: str) -> Any:
     df["rsi_14"] = 100 - 100 / (1 + rs)
     df["day_of_week"] = df["trade_date"].dt.dayofweek
 
-    df["target_t1"] = (close.shift(-1) > close).astype(int)
-    df["target_t2"] = (close.shift(-2) > close).astype(int)
-    df["target_t3"] = (close.shift(-3) > close).astype(int)
-    df["target_t5"] = (close.shift(-5) > close).astype(int)
+    from backend.ml.features import add_future_return_targets
+    df = add_future_return_targets(df)
 
     return df.dropna(subset=["ret_10d", "rsi_14"]).reset_index(drop=True)
 

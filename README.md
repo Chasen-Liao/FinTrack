@@ -25,7 +25,7 @@ graph TB
     ALIGN --> DB
     DB --> FEAT[特征工程]
     FEAT --> MODEL[XGBoost 预测]
-    FE --> REACT[React + D3.js]
+    FEAT --> REACT[React + D3.js]
 ```
 
 ## 核心特性

@@ -13,7 +13,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
 
 from backend.database import get_conn
-from backend.ml.features import build_features, FEATURE_COLS
+from backend.ml.features import build_features, FEATURE_COLS, _target_from_return
 
 
 class TextSvdFeatureTransformer:
@@ -213,17 +213,16 @@ def build_features_v2(symbol: str, use_text: bool = False) -> pd.DataFrame:
     # 4. New targets
     close = df["close"]
     ret_t1 = close.shift(-1) / close - 1
-    ret_t2 = close.shift(-2) / close - 1
     ret_t3 = close.shift(-3) / close - 1
 
     # Big move targets: |return| > threshold
-    df["target_big1_t1"] = (ret_t1.abs() > 0.01).astype(int)  # >1% move
-    df["target_big2_t1"] = (ret_t1.abs() > 0.02).astype(int)  # >2% move
-    df["target_big1_t3"] = ((close.shift(-3) / close - 1).abs() > 0.02).astype(int)  # >2% in 3 days
+    df["target_big1_t1"] = _target_from_return(ret_t1, ret_t1.abs() > 0.01)  # >1% move
+    df["target_big2_t1"] = _target_from_return(ret_t1, ret_t1.abs() > 0.02)  # >2% move
+    df["target_big1_t3"] = _target_from_return(ret_t3, ret_t3.abs() > 0.02)  # >2% in 3 days
 
     # Direction only when big move (more signal)
-    df["target_up_big_t1"] = ((ret_t1 > 0.01)).astype(int)   # up >1%
-    df["target_down_big_t1"] = ((ret_t1 < -0.01)).astype(int)  # down >1%
+    df["target_up_big_t1"] = _target_from_return(ret_t1, ret_t1 > 0.01)   # up >1%
+    df["target_down_big_t1"] = _target_from_return(ret_t1, ret_t1 < -0.01)  # down >1%
 
     # Drop NaN from new features
     df = df.dropna(subset=["candle_body_ratio"]).reset_index(drop=True)

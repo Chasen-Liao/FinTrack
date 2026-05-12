@@ -18,7 +18,7 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 
 from backend.database import get_conn
-from backend.ml.features import build_features, FEATURE_COLS
+from backend.ml.features import build_features, FEATURE_COLS, add_future_return_targets
 from backend.ml.features_v2 import FEATURE_COLS_V2_MARKET
 
 MODELS_DIR = Path(__file__).parent / "models"
@@ -129,11 +129,7 @@ def build_features_filtered(symbol: str, exclude_neutral: bool = True) -> pd.Dat
             df[col] = df[col].fillna(0)
 
     # Targets
-    df["target_t1"] = (close.shift(-1) > close).astype(int)
-    df["target_t3"] = (close.shift(-3) > close).astype(int)
-    df["target_t5"] = (close.shift(-5) > close).astype(int)
-    df["target_big1_t1"] = ((close.shift(-1) / close - 1).abs() > 0.01).astype(int)
-    df["target_up_big_t5"] = ((close.shift(-5) / close - 1) > 0.03).astype(int)
+    df = add_future_return_targets(df)
 
     df = df.dropna(subset=["ret_10d", "rsi_14"]).reset_index(drop=True)
     return df

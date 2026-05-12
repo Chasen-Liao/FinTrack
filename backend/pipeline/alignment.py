@@ -4,8 +4,9 @@ Ported from stock.py lines 148-201.
 Maps published_utc to nearest trading day and computes T+0/1/3/5/10 returns.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from backend.database import get_conn
 
@@ -45,10 +46,7 @@ def align_news_for_symbol(symbol: str) -> dict:
 
     for row in news_rows:
         pu = row["published_utc"]
-        d0 = _to_iso_date(pu)
-        if not d0:
-            continue
-        trade_date = _shift_to_trade_day(d0, idx)
+        trade_date = _resolve_trade_date_from_published(pu, idx)
         if not trade_date:
             continue
 
@@ -99,6 +97,27 @@ def _to_iso_date(published_utc: Optional[str]) -> Optional[str]:
         )
     except (ValueError, AttributeError):
         return None
+
+
+def _resolve_trade_date_from_published(published_utc: Optional[str], idx: dict) -> Optional[str]:
+    """Map a UTC publish time to the first tradable decision date.
+
+    Regular-session news is aligned to its local trading day. News published
+    after the US cash close is aligned to the next available trading day so the
+    model does not treat after-close information as known during that session.
+    """
+    if not published_utc:
+        return None
+    try:
+        published = datetime.fromisoformat(published_utc.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+
+    eastern_time = published.astimezone(ZoneInfo("America/New_York"))
+    local_date = eastern_time.date()
+    if eastern_time.time() >= time(16, 0):
+        local_date += timedelta(days=1)
+    return _shift_to_trade_day(local_date.isoformat(), idx)
 
 
 def _shift_to_trade_day(d: str, idx: dict) -> Optional[str]:

@@ -24,6 +24,16 @@ def test_add_future_return_targets_creates_direction_and_big_move_labels():
     assert result.loc[0, "target_up_big_t5"] == 1
 
 
+def test_add_future_return_targets_keeps_unrealized_future_labels_missing():
+    df = pd.DataFrame({"close": [100.0, 101.0, 102.0, 103.0, 104.0, 105.0]})
+
+    result = add_future_return_targets(df.copy())
+
+    assert pd.isna(result.loc[5, "future_return_t1"])
+    assert pd.isna(result.loc[5, "target_t1"])
+    assert pd.isna(result.loc[1, "target_t5"])
+
+
 def test_add_market_benchmark_features_merges_shifted_relative_returns():
     base = pd.DataFrame(
         {

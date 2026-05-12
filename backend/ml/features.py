@@ -364,22 +364,27 @@ def add_future_return_targets(df: pd.DataFrame) -> pd.DataFrame:
     df["future_return_t3"] = close.shift(-3) / close - 1
     df["future_return_t5"] = close.shift(-5) / close - 1
 
-    df["target_t1"] = (df["future_return_t1"] > 0).astype(int)
-    df["target_t2"] = (df["future_return_t2"] > 0).astype(int)
-    df["target_t3"] = (df["future_return_t3"] > 0).astype(int)
-    df["target_t5"] = (df["future_return_t5"] > 0).astype(int)
+    df["target_t1"] = _target_from_return(df["future_return_t1"], df["future_return_t1"] > 0)
+    df["target_t2"] = _target_from_return(df["future_return_t2"], df["future_return_t2"] > 0)
+    df["target_t3"] = _target_from_return(df["future_return_t3"], df["future_return_t3"] > 0)
+    df["target_t5"] = _target_from_return(df["future_return_t5"], df["future_return_t5"] > 0)
 
-    df["target_big1_t5"] = (df["future_return_t5"].abs() > 0.01).astype(int)
-    df["target_big2_t5"] = (df["future_return_t5"].abs() > 0.02).astype(int)
-    df["target_up_big_t5"] = (df["future_return_t5"] > 0.03).astype(int)
-    df["target_down_big_t5"] = (df["future_return_t5"] < -0.03).astype(int)
+    df["target_big1_t5"] = _target_from_return(df["future_return_t5"], df["future_return_t5"].abs() > 0.01)
+    df["target_big2_t5"] = _target_from_return(df["future_return_t5"], df["future_return_t5"].abs() > 0.02)
+    df["target_up_big_t5"] = _target_from_return(df["future_return_t5"], df["future_return_t5"] > 0.03)
+    df["target_down_big_t5"] = _target_from_return(df["future_return_t5"], df["future_return_t5"] < -0.03)
 
     # Also expose t1 big-move labels for parity with t5
-    df["target_big1_t1"] = (df["future_return_t1"].abs() > 0.01).astype(int)
-    df["target_big2_t1"] = (df["future_return_t1"].abs() > 0.02).astype(int)
-    df["target_up_big_t1"] = (df["future_return_t1"] > 0.01).astype(int)
+    df["target_big1_t1"] = _target_from_return(df["future_return_t1"], df["future_return_t1"].abs() > 0.01)
+    df["target_big2_t1"] = _target_from_return(df["future_return_t1"], df["future_return_t1"].abs() > 0.02)
+    df["target_up_big_t1"] = _target_from_return(df["future_return_t1"], df["future_return_t1"] > 0.01)
 
     return df
+
+
+def _target_from_return(return_series: pd.Series, condition: pd.Series) -> pd.Series:
+    """Return 1/0 labels while preserving missing unrealized future returns."""
+    return condition.astype(float).where(return_series.notna(), np.nan)
 
 
 def build_features_multi(symbols: list[str] | None = None,
