@@ -230,7 +230,7 @@ anthropic_api_key=your_anthropic_key
 | 单股 Layer 1 情感分析 | `python -c "from backend.pipeline.layer1 import run_layer1; run_layer1('AAPL')"` |
 | 批量 Layer 1 分析 | `python -m backend.batch_submit --top 50` |
 | 策略回测扫描 | `python -m backend.ml.strategy_backtest --scan` |
-| 查看单策略详情 | `python -m backend.ml.strategy_backtest --symbol MU --horizon t5 --threshold 0.5` |
+| 查看单策略详情 | `python -m backend.ml.strategy_backtest --symbol MU --horizon t5 --threshold 0.65` |
 
 ### ML 训练与评估命令
 
