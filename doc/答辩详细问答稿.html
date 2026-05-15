@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PokieTicker 答辩详细问答稿</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --bg-2: #e9dfcf;
+      --paper: rgba(255, 251, 244, 0.82);
+      --paper-strong: #fffaf1;
+      --ink: #1d2a24;
+      --muted: #5f6f67;
+      --line: rgba(29, 42, 36, 0.12);
+      --accent: #0f6b4e;
+      --accent-2: #b56b2c;
+      --accent-3: #173a7a;
+      --good: #1f7a3f;
+      --warn: #a35b13;
+      --shadow: 0 24px 60px rgba(39, 49, 43, 0.12);
+      --shadow-soft: 0 10px 28px rgba(39, 49, 43, 0.08);
+      --radius-xl: 30px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+      --content-width: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 107, 78, 0.18), transparent 30%),
+        radial-gradient(circle at 82% 18%, rgba(181, 107, 44, 0.20), transparent 24%),
+        radial-gradient(circle at 10% 78%, rgba(23, 58, 122, 0.10), transparent 24%),
+        linear-gradient(180deg, var(--bg), var(--bg-2));
+      font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+      line-height: 1.78;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 42px 42px;
+      opacity: .45;
+      mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .wrap {
+      width: min(var(--content-width), calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 28px 0 72px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.42);
+      border-radius: 36px;
+      background:
+        linear-gradient(145deg, rgba(255,255,255,0.88), rgba(250,244,232,0.82)),
+        radial-gradient(circle at top right, rgba(15,107,78,0.08), transparent 36%);
+      box-shadow: var(--shadow);
+      padding: 36px 36px 30px;
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 28px;
+      backdrop-filter: blur(10px);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -10% -38% auto;
+      width: 360px;
+      height: 360px;
+      background: radial-gradient(circle, rgba(15,107,78,0.16), transparent 68%);
+      border-radius: 50%;
+      filter: blur(2px);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(15, 107, 78, 0.10);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .title {
+      margin: 18px 0 12px;
+      font-size: clamp(34px, 4vw, 58px);
+      line-height: 1.06;
+      letter-spacing: -0.04em;
+    }
+
+    .subtitle {
+      margin: 0;
+      max-width: 56ch;
+      font-size: 18px;
+      color: var(--muted);
+    }
+
+    .hero-meta {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      justify-items: stretch;
+    }
+
+    .meta-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: rgba(255,255,255,0.82);
+      padding: 18px 18px 16px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .meta-title {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    }
+
+    .meta-value {
+      font-size: 20px;
+      line-height: 1.4;
+      font-weight: 700;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .chip {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(15, 107, 78, 0.12);
+      background: rgba(15, 107, 78, 0.07);
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .layout {
+      margin-top: 26px;
+      display: grid;
+      grid-template-columns: 290px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .toc {
+      position: sticky;
+      top: 20px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255,255,255,0.76);
+      box-shadow: var(--shadow-soft);
+      padding: 18px;
+      backdrop-filter: blur(10px);
+    }
+
+    .toc h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .toc p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .toc ol {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .toc a {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 12px;
+      border-radius: 14px;
+      color: var(--ink);
+      border: 1px solid transparent;
+      background: rgba(255,255,255,0.65);
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+
+    .toc a:hover {
+      transform: translateX(4px);
+      border-color: rgba(15, 107, 78, 0.18);
+      background: rgba(15, 107, 78, 0.06);
+    }
+
+    .toc .index {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .content {
+      display: grid;
+      gap: 18px;
+    }
+
+    .section {
+      border-radius: 28px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      box-shadow: var(--shadow-soft);
+      padding: 26px 24px;
+      backdrop-filter: blur(8px);
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    .section .intro {
+      color: var(--muted);
+      margin: 0 0 16px;
+      max-width: 72ch;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      border: 1px solid rgba(29, 42, 36, 0.10);
+      border-radius: 20px;
+      background: rgba(255,255,255,0.75);
+      padding: 18px 18px 16px;
+    }
+
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      line-height: 1.35;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .qa {
+      margin-top: 12px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .qa-item {
+      padding: 18px;
+      border-radius: 22px;
+      border: 1px solid rgba(29, 42, 36, 0.10);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,255,255,0.78));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .qa-item::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 6px;
+      background: linear-gradient(180deg, var(--accent), rgba(15,107,78,0.35));
+    }
+
+    .q {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin: 0 0 10px;
+      font-size: 18px;
+      line-height: 1.45;
+      font-weight: 800;
+    }
+
+    .q .tag {
+      flex: 0 0 auto;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(23, 58, 122, 0.08);
+      color: var(--accent-3);
+      font-size: 12px;
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      margin-top: 2px;
+    }
+
+    .a {
+      color: #30413a;
+      margin: 0;
+      white-space: pre-line;
+    }
+
+    .code-ref {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(15, 107, 78, 0.06);
+      border: 1px solid rgba(15, 107, 78, 0.12);
+      color: #244236;
+      font-size: 14px;
+    }
+
+    .code-ref code,
+    .inline {
+      font-family: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+      font-size: 0.96em;
+      background: rgba(15, 107, 78, 0.08);
+      padding: 0 5px;
+      border-radius: 6px;
+    }
+
+    .callout {
+      border-radius: 24px;
+      padding: 20px 22px;
+      border: 1px solid rgba(181, 107, 44, 0.16);
+      background: linear-gradient(180deg, rgba(255,248,239,0.95), rgba(255,241,226,0.86));
+    }
+
+    .callout h3 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+
+    .callout p, .callout li {
+      color: #4b3d2e;
+    }
+
+    .callout ul {
+      margin: 10px 0 0 20px;
+      padding: 0;
+    }
+
+    .quote {
+      font-size: 16px;
+      line-height: 1.9;
+      padding: 16px 18px;
+      border-left: 4px solid var(--accent-2);
+      background: rgba(181, 107, 44, 0.08);
+      border-radius: 0 16px 16px 0;
+      color: #4b3b27;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 14px;
+    }
+
+    .mini-list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(23, 58, 122, 0.07);
+      color: #26426f;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .badge strong {
+      color: var(--accent);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .summary-box {
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(255,255,255,0.8);
+      border: 1px solid rgba(29,42,36,0.10);
+    }
+
+    .summary-box .label {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .summary-box .value {
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.4;
+    }
+
+    .highlight {
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    @media (max-width: 1080px) {
+      .hero, .layout, .two-col {
+        grid-template-columns: 1fr;
+      }
+      .toc {
+        position: static;
+      }
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .wrap {
+        width: min(calc(100vw - 22px), var(--content-width));
+        padding: 12px 0 28px;
+      }
+      .hero {
+        padding: 24px 18px 20px;
+        border-radius: 28px;
+      }
+      .section {
+        padding: 20px 16px;
+        border-radius: 24px;
+      }
+      .title {
+        font-size: 30px;
+      }
+      .q {
+        flex-direction: column;
+        gap: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">oral defense • detailed Q&A sheet</div>
+        <h1 class="title">答辩详细问答稿</h1>
+        <p class="subtitle">
+          这份文档按“先讲整体思路，再讲实现细节，最后应对追问”的顺序整理，适合你在答辩前直接背诵。
+          每个问题后面都附了代码落点，方便你把“说法”对应回“实现”。
+        </p>
+        <div class="chips">
+          <span class="chip">LLM + XGBoost</span>
+          <span class="chip">新闻过滤与对齐</span>
+          <span class="chip">前视偏差控制</span>
+          <span class="chip">扩展窗口验证</span>
+          <span class="chip">策略回测</span>
+          <span class="chip">前端 AI 分析</span>
+        </div>
+      </div>
+      <div class="hero-meta">
+        <div class="meta-card">
+          <div class="meta-title">答辩时先说的核心句</div>
+          <div class="meta-value">“我把新闻先结构化，再和价格特征一起做预测，最终用回测验证策略是否真的可用。”</div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-title">你最需要守住的点</div>
+          <div class="meta-value">时间对齐、`shift(1)`、扩展窗口、阈值化交易信号。</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="toc">
+        <h2>目录</h2>
+        <p>按这个顺序背，临场最稳。</p>
+        <ol>
+          <li><a href="#sec0"><span>总述与定位</span><span class="index">01</span></a></li>
+          <li><a href="#sec1"><span>系统总体流程</span><span class="index">02</span></a></li>
+          <li><a href="#sec2"><span>数据与新闻处理</span><span class="index">03</span></a></li>
+          <li><a href="#sec3"><span>特征工程与标签</span><span class="index">04</span></a></li>
+          <li><a href="#sec4"><span>模型训练与验证</span><span class="index">05</span></a></li>
+          <li><a href="#sec5"><span>回测与收益计算</span><span class="index">06</span></a></li>
+          <li><a href="#sec6"><span>前端展示与交互</span><span class="index">07</span></a></li>
+          <li><a href="#sec7"><span>高频追问与补刀题</span><span class="index">08</span></a></li>
+          <li><a href="#sec8"><span>60 秒总结稿</span><span class="index">09</span></a></li>
+        </ol>
+      </aside>
+
+      <main class="content">
+        <section class="section" id="sec0">
+          <h2>1. 先把定位讲清楚</h2>
+          <p class="intro">
+            答辩一开始，不要直接讲代码。先用 20 秒把系统定位说清楚：
+            这是一个把 <span class="highlight">股票行情</span>、<span class="highlight">财经新闻</span> 和
+            <span class="highlight">机器学习预测</span> 结合起来的量化交易研究系统。
+            其中 LLM 不直接决定买卖，而是负责把新闻文本转成结构化语义特征，再交给 XGBoost 做方向预测。
+          </p>
+          <div class="summary-grid">
+            <div class="summary-box">
+              <div class="label">你要强调的创新</div>
+              <div class="value">LLM 做语义解析，XGBoost 做统计预测。</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">你要强调的约束</div>
+              <div class="value">避免前视偏差，保证交易日对齐。</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">你要强调的结果</div>
+              <div class="value">模型结果必须落到回测，而不是停留在分类分数。</div>
+            </div>
+          </div>
+          <div class="badge-row">
+            <span class="badge"><strong>代码落点</strong> `backend/pipeline/`</span>
+            <span class="badge"><strong>代码落点</strong> `backend/ml/`</span>
+            <span class="badge"><strong>代码落点</strong> `backend/api/routers/`</span>
+          </div>
+        </section>
+
+        <section class="section" id="sec1">
+          <h2>2. 系统总体流程，老师最爱先问这个</h2>
+          <p class="intro">
+            这个问题的目标不是考你记忆力，而是看你能不能把系统说成一条清晰的数据链。
+            你要能从“数据从哪来”一直讲到“最后怎么显示给用户”。
+          </p>
+          <div class="qa">
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 1</span><span>老师：你这个系统的整体流程是什么？</span></div>
+              <p class="a">你可以这样答：
+先从 Polygon.io 拉取股票日线行情和相关新闻；
+然后对新闻做 Layer 0 规则过滤，去掉空摘要、过短摘要、榜单类文章和明显无关的内容；
+接着用 Layer 1 做批量 LLM 情绪分析，把新闻转成情绪、相关性、事件类别和原因解释；
+之后把新闻按交易日对齐，再和 OHLC 价格数据合并做特征工程；
+最后用 XGBoost 做未来 T+1 或 T+5 方向预测，并把预测概率转换成交易信号做回测。</p>
+              <div class="code-ref">对应实现：<code>backend/pipeline/layer0.py</code>、<code>backend/pipeline/layer1.py</code>、<code>backend/pipeline/alignment.py</code>、<code>backend/ml/features.py</code>、<code>backend/ml/strategy_backtest.py</code></div>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 2</span><span>老师：为什么要把系统拆成这么多层？</span></div>
+              <p class="a">因为不同层负责不同任务。
+Layer 0 负责“降噪”，只保留与股票相关的新闻；
+Layer 1 负责“结构化”，把新闻文本转成模型能用的数值或类别特征；
+Layer 2 负责“解释”，回答用户“这条新闻为什么影响股价”；
+最后机器学习模型负责“预测”。
+这样拆的好处是，每一层职责单一，成本更可控，也更方便调试。</p>
+              <div class="code-ref">前端展示入口：<code>frontend/src/components/PredictionPanel.tsx</code>、<code>frontend/src/components/RangeAnalysisPanel.tsx</code></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="sec2">
+          <h2>3. 数据与新闻处理，这是答辩里的核心地基</h2>
+          <p class="intro">
+            老师如果开始追数据，通常会问“新闻怎么过滤”“怎么对齐交易日”“怎么知道没把未来信息泄露进去”。
+            这部分你一定要讲得特别具体。
+          </p>
+          <div class="grid-2">
+            <div class="card">
+              <h3>3.1 新闻为什么要先过滤？</h3>
+              <p>因为原始新闻噪声很高，空摘要、太短摘要、市场综述、榜单文章都会把模型带偏。先过滤能减少无效样本，提高后续 LLM 和特征工程的质量。</p>
+            </div>
+            <div class="card">
+              <h3>3.2 Layer 0 到底做了什么？</h3>
+              <p>它主要做规则筛选，不做语义理解。重点是把明显不相关或信息量过低的新闻提前排掉，避免把无效文本送到更贵的 LLM 阶段。</p>
+            </div>
+            <div class="card">
+              <h3>3.3 Layer 1 为什么要批量分析？</h3>
+              <p>因为单条调用成本太高。当前实现把多篇文章打包成一个 prompt 批量处理，输出 JSON 结构，便于后续数据库写入和特征聚合。</p>
+            </div>
+            <div class="card">
+              <h3>3.4 新闻怎么映射到交易日？</h3>
+              <p>先把发布时间转成美国东部时间，再决定它属于当天还是下一个交易日。收盘后发布的新闻要顺延到下一交易日，避免把“收盘后才知道的信息”误算成当天可知。</p>
+            </div>
+          </div>
+          <div class="callout" style="margin-top:14px;">
+            <h3>你可以直接背的时间对齐回答</h3>
+            <p class="quote">
+              “我把新闻发布时间先转换成美东时间，再判断是否在 16:00 之后。若在收盘后发布，就顺延到下一个交易日；如果当天不是交易日，再继续往后找最近的可交易日。这样可以确保模型只使用当时理论上已经能获得的信息。”
+            </p>
+            <div class="code-ref">对应实现：<code>backend/pipeline/alignment.py</code>，重点看 <code>_resolve_trade_date_from_published()</code></div>
+          </div>
+        </section>
+
+        <section class="section" id="sec3">
+          <h2>4. 特征工程与标签，老师大概率会深挖</h2>
+          <p class="intro">
+            这部分是最容易被问细节的地方。你要能说出“有哪些特征”“为什么这么做”“怎么避免前视偏差”。
+          </p>
+          <div class="qa">
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 3</span><span>老师：你的特征都有哪些？</span></div>
+              <p class="a">可以分成四类回答：
+第一类是新闻基础特征，比如当日新闻数、相关新闻数、正负中性数量、情绪分数和情绪强度；
+第二类是滚动统计特征，比如 3 日、5 日、10 日的情绪均值、新闻总量和情绪动量；
+第三类是事件类别特征，比如 earnings、product、regulatory、macro、analyst、management、industry 等；
+第四类是价格技术特征，比如历史收益率、波动率、成交量比、跳空幅度、均线偏离、RSI 和星期几。</p>
+              <div class="code-ref">对应实现：<code>backend/ml/features.py</code> 和 <code>backend/ml/features_v2.py</code></div>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 4</span><span>老师：你怎么避免前视偏差？</span></div>
+              <p class="a">这是必须背熟的一题。
+价格类技术指标大多使用 <span class="inline">shift(1)</span>，也就是第 N 天的特征只能来自 N-1 天及以前的数据；
+标签则通过未来价格生成，例如 T+5 收盘价是否高于当前收盘价；
+新闻特征先对齐交易日，再做聚合，确保不会把未来新闻泄露进来；
+如果用了文本降维特征，TF-IDF 和 SVD 只在训练窗口拟合，测试窗口只做 transform，不会偷看测试期词汇分布。</p>
+              <div class="code-ref">对应实现：<code>backend/ml/features.py</code>、<code>backend/ml/features_v2.py</code>、<code>backend/ml/walk_forward.py</code></div>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 5</span><span>老师：为什么你的标签设成 T+5？</span></div>
+              <p class="a">因为 T+5 介于太短和太长之间。
+T+1 容易受噪声和短期波动影响；
+T+10 又可能让新闻和价格之间的关系变弱；
+T+5 更适合作为短中期方向预测的折中选择，也更符合课程设计里“能解释、能回测”的要求。</p>
+              <div class="code-ref">相关标签：<code>target_t1</code>、<code>target_t5</code>、<code>target_up_big_t5</code></div>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 6</span><span>老师：为什么还要做低噪声标签？</span></div>
+              <p class="a">因为原始涨跌标签里，很多小幅波动本质上接近噪声。
+如果把这些样本都当成正负样本，模型很难学出稳定映射。
+所以我额外构造了涨幅阈值更高的标签，用来验证“是不是标签噪声拖累了排序能力”。</p>
+              <div class="code-ref">报告里对应 AUC 优先实验和多档收益阈值标签</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="sec4">
+          <h2>5. 模型训练与验证，重点是你为什么这么选</h2>
+          <p class="intro">
+            这一部分老师通常会问“为什么不用别的模型”“参数怎么定的”“怎么验证不是过拟合”。
+            回答时不要空泛，要回到数据形态和验证方式。
+          </p>
+          <div class="qa">
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 7</span><span>老师：为什么选 XGBoost，而不是 LSTM 或 Transformer？</span></div>
+              <p class="a">因为你的输入本质上是交易日粒度的结构化表格，不是大规模连续序列。
+XGBoost 对中小规模表格数据更稳，训练快，可解释性也更好；
+而 LSTM 对样本量、序列质量和调参更敏感，在当前数据条件下不一定占优。
+我的拓展实验也验证了这一点，LSTM 并没有超过树模型。</p>
+              <div class="code-ref">对应训练：<code>backend/ml/model.py</code>、<code>backend/ml/lstm_model.py</code></div>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 8</span><span>老师：你怎么做模型验证？</span></div>
+              <p class="a">我不用随机切分，而是采用时间顺序和扩展窗口验证。
+原因很简单：金融时间序列不能乱序，不然会把未来数据混进训练集。
+扩展窗口的方式是先用历史较少的数据训练，再逐步扩大训练窗口，用更接近实战的方式观察泛化能力。</p>
+              <div class="code-ref">对应实现：<code>backend/ml/walk_forward.py</code></div>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 9</span><span>老师：参数为什么是这些值？</span></div>
+              <p class="a">这些参数并不是拍脑袋定的，而是结合扩展窗口搜索结果和课程项目的稳定性选择的。
+比如 max_depth、n_estimators、learning_rate、subsample 和 colsample_bytree 都是为了在欠拟合和过拟合之间折中。
+如果老师继续追问，你可以强调：我关注的是验证集表现和策略回测，而不是一味把训练分数调高。</p>
+              <div class="code-ref">常见参数：<code>max_depth=4</code>、<code>n_estimators=200</code>、<code>learning_rate=0.05</code>、<code>subsample=0.8</code>、<code>colsample_bytree=0.8</code></div>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 10</span><span>老师：准确率不高，为什么还要做回测？</span></div>
+              <p class="a">因为分类准确率和交易收益不是一回事。
+分类指标衡量的是“猜对没猜对”，回测衡量的是“这个概率输出能不能形成可执行的交易决策”。
+有时候模型整体准确率一般，但在高置信度样本上仍然有交易价值，所以必须同时看分类指标和策略指标。</p>
+              <div class="code-ref">评估指标：Accuracy、Precision、Recall、F1、ROC-AUC、年化收益、最大回撤</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="sec5">
+          <h2>6. 回测与收益计算，老师很可能顺着问细节</h2>
+          <p class="intro">
+            回测是最容易“听起来会，细问就露馅”的部分。
+            你至少要能把仓位规则、手续费、收益和最大回撤讲清楚。
+          </p>
+          <div class="grid-2">
+            <div class="card">
+              <h3>6.1 交易信号怎么来的？</h3>
+              <p>模型输出上涨概率 <span class="inline">prob_up</span>。当它大于等于阈值时做多，低于阈值时空仓。也就是说，策略本质上是 long/cash，而不是复杂的多空对冲。</p>
+            </div>
+            <div class="card">
+              <h3>6.2 手续费怎么处理？</h3>
+              <p>每次换仓都会扣手续费，课程里使用的是固定费率。这样做是为了更接近真实交易，不至于把无成本回测看得过于乐观。</p>
+            </div>
+            <div class="card">
+              <h3>6.3 为什么选择阈值而不是直接全仓？</h3>
+              <p>因为模型并不是每天都足够有把握。通过阈值可以只在高置信度时入场，减少噪声交易，也更容易控制回撤。</p>
+            </div>
+            <div class="card">
+              <h3>6.4 最大回撤怎么理解？</h3>
+              <p>它衡量的是净值从历史高点到后续低点的最大跌幅。这个指标比单纯收益更能体现策略的风险暴露，答辩时一定要提。</p>
+            </div>
+          </div>
+          <div class="qa" style="margin-top:14px;">
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 11</span><span>老师：你的回测到底怎么跑的？</span></div>
+              <p class="a">你可以这样答：
+先把模型输出的概率转换成交易信号；
+然后按照日频 close-to-close 的简化假设，信号在下一交易段生效；
+持仓期间按日收益累计，换仓时扣手续费；
+最后得到净值曲线，再计算年化收益率、最大回撤、胜率和累计收益。</p>
+              <div class="code-ref">对应实现：<code>backend/ml/strategy_backtest.py</code>，重点看 <code>simulate_equity_curve()</code></div>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">高频 12</span><span>老师：为什么回测结果能达标？</span></div>
+              <p class="a">我会诚实地说，这个结果是课程实验口径下的样本外回测结果，不等于实盘可直接复现。
+它说明的是：在当前数据、标签和阈值设定下，这个策略组合在实验区间内达到了课程要求。
+如果老师问稳定性，我会补一句：后续仍需要进一步验证跨时间段和跨股票的泛化能力。</p>
+              <div class="code-ref">课程结果文件：<code>backend/ml/models/*_strategy_backtest.json</code></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="sec6">
+          <h2>7. 前端展示和交互，答辩时也会被问</h2>
+          <p class="intro">
+            如果老师看见你的页面，很可能会问“这个图表后面接的是什么接口”“点击后发生了什么”。
+            你不需要背前端所有细节，但要知道主入口在哪里。
+          </p>
+          <div class="qa">
+            <div class="qa-item">
+              <div class="q"><span class="tag">前端 1</span><span>老师：前端上这些预测和分析信息从哪来？</span></div>
+              <p class="a">主要来自后端 API。
+比如预测结果从 <span class="inline">/api/predict/{symbol}/forecast</span> 来；
+策略回测结果来自 <span class="inline">/api/predict/{symbol}/strategy-backtest</span>；
+深度分析则通过单条新闻或区间分析接口获取，再在前端面板里展示。</p>
+              <div class="code-ref">对应前端：<code>frontend/src/components/PredictionPanel.tsx</code>、<code>frontend/src/components/RangeAnalysisPanel.tsx</code>、<code>frontend/src/components/StrategyBacktestPanel.tsx</code></div>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">前端 2</span><span>老师：为什么还要做前端展示？</span></div>
+              <p class="a">因为答辩里不仅要证明“模型能跑”，还要证明“系统能用”。
+前端把新闻、预测、相似历史区间和深度分析集中到一个界面，能让用户更直观看到 AI 分析链路，而不是只看命令行输出。</p>
+              <div class="code-ref">相关组件：<code>CandlestickChart.tsx</code>、<code>NewsPanel.tsx</code>、<code>SimilarDaysPanel.tsx</code></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="sec7">
+          <h2>8. 高频追问与补刀题</h2>
+          <p class="intro">
+            这一段是你在老师追着问的时候用的。建议不要逐字背，但要把每个答案的逻辑记住。
+          </p>
+          <div class="qa">
+            <div class="qa-item">
+              <div class="q"><span class="tag">追问 1</span><span>老师：LLM 会不会胡说？</span></div>
+              <p class="a">会，所以我没有让它直接做交易决策。
+我让它做的是结构化信息提取和解释补充，真正的方向判断还是交给统计模型和回测结果。
+这样做可以把幻觉风险限制在“解释层”，不会直接污染最终信号。</p>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">追问 2</span><span>老师：为什么要做事件类别特征？</span></div>
+              <p class="a">因为不同新闻类型对价格的影响机制不一样。
+财报更直接影响盈利预期，监管新闻更容易带来风险溢价变化，产品发布更偏成长预期。
+把这些类别单独拆出来，比简单统计正负新闻更有信息量。</p>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">追问 3</span><span>老师：为什么还要做板块联动？</span></div>
+              <p class="a">因为个股有时当天没新闻，但同板块龙头的消息会影响它。
+尤其是科技和半导体板块，股票之间存在明显联动。
+所以我把同板块其他股票的新闻情绪也作为辅助特征。</p>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">追问 4</span><span>老师：你这个模型最大的局限是什么？</span></div>
+              <p class="a">最大的局限是标签噪声和样本规模。
+很多日频涨跌本身接近随机，短期价格波动很难完全被新闻解释；
+所以这个系统更适合作为课程实验和研究原型，而不是直接宣称能稳定实盘盈利。</p>
+            </div>
+            <div class="qa-item">
+              <div class="q"><span class="tag">追问 5</span><span>老师：如果让你继续优化，你会怎么做？</span></div>
+              <p class="a">我会优先做三件事：
+第一，继续减少标签噪声，优化阈值化标签；
+第二，增强文本和事件特征；
+第三，继续扩大跨股票、跨周期的扩展窗口验证，看看模型是否真有稳定泛化能力。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="sec8">
+          <h2>9. 60 秒总结稿，最后收口用</h2>
+          <div class="callout">
+            <h3>你可以直接背这段</h3>
+            <p class="quote">
+              “我的课程设计是一个基于 AI 算法的量化交易策略系统。系统先从 Polygon.io 获取股票行情和相关新闻，再通过规则过滤、LLM 情绪分析和交易日对齐，把新闻转成结构化特征。随后将这些新闻特征与价格技术指标一起输入 XGBoost，预测未来 T+1 或 T+5 的上涨概率，并将概率转换为交易信号进行样本外回测。为了保证结果可信，我重点控制了前视偏差、时间泄露和回测手续费问题，同时在前端提供了单条新闻深度分析和区间分析，让系统既能做预测，也能解释预测。总体来说，它不是简单的新闻聚合工具，而是一条完整的‘数据获取-分析-建模-回测-展示’链路。”
+            </p>
+          </div>
+
+          <div class="two-col" style="margin-top:14px;">
+            <div class="card">
+              <h3>临场提示</h3>
+              <ul class="mini-list">
+                <li>回答时先说结论，再补代码细节。</li>
+                <li>被追问时优先守住“时间对齐、shift(1)、扩展窗口验证”。</li>
+                <li>不要把 LLM 说成直接预测涨跌，它只是特征和解释的一部分。</li>
+                <li>回测结果一定要带上“课程实验口径”这句话，避免被误解成实盘承诺。</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>你最该记住的文件</h3>
+              <ul class="mini-list">
+                <li><code>backend/pipeline/layer0.py</code></li>
+                <li><code>backend/pipeline/layer1.py</code></li>
+                <li><code>backend/pipeline/alignment.py</code></li>
+                <li><code>backend/ml/features.py</code></li>
+                <li><code>backend/ml/walk_forward.py</code></li>
+                <li><code>backend/ml/strategy_backtest.py</code></li>
+                <li><code>backend/api/routers/predict.py</code></li>
+                <li><code>frontend/src/components/PredictionPanel.tsx</code></li>
+              </ul>
+            </div>
+          </div>
+
+          <p class="footer-note">
+            如果你愿意，我下一步可以继续帮你做一个“更适合背诵的精简版 HTML”，或者把这份文档再压缩成“老师问一句，你回一句”的口语版。
+          </p>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
